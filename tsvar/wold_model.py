@@ -104,7 +104,7 @@ class WoldModel(Model):
         # Observed events, add a virtual event at `end_time` for easier log-likelihood computation
         self.events = []
         for i in range(self.dim):
-            self.events.append(torch.cat((events[i], torch.tensor([self.end_time]))))
+            self.events.append(torch.cat((events[i], torch.tensor([self.end_time], dtype=torch.float))))
         # Number of events per dimension
         self.n_jumps_per_dim = list(map(len, self.events))
         # Check that all dimensions have at least one event, otherwise the computation of the 

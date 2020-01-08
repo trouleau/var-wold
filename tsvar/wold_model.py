@@ -1,6 +1,12 @@
 import abc
 import torch
+import numba
+import warnings
 import numpy as np
+
+
+warnings.filterwarnings(action='ignore',
+    category=numba.NumbaPendingDeprecationWarning, module='numba')
 
 
 class Model(metaclass=abc.ABCMeta):
@@ -15,6 +21,45 @@ class Model(metaclass=abc.ABCMeta):
     def log_likelihood(self, params):
         """Evaluate the log likelihood of the model for the given parameters"""
 
+
+@numba.jit(nopython=True, fastmath=True)
+def _wold_model_init_cache(events):
+        dim = len(events)
+        n_jumps = [len(events[i]) for i in range(dim)]
+        delta_ikj = [np.zeros((n_jumps[i], dim)) for i in range(dim)]
+        valid_mask_ikj = [np.ones((n_jumps[i], dim), dtype=np.bool_) for i in range(dim)]
+        # For each reiceiving dimension
+        for i in range(dim):
+            last_idx_tlj = [-1 for j in range(dim)]
+            last_tki = events[i][0]
+            # For each observed event, compute the inter-arrival time with
+            # each dimension
+            for k, tki in enumerate(events[i]):
+                if k == 0:
+                    # Delta should be ignored for the first event.
+                    # Mark has invalid
+                    valid_mask_ikj[i][k,:] = 0
+                    continue
+                last_tki = events[i][k-1]
+                # For each incoming dimension
+                for j in range(dim):
+                    if (last_idx_tlj[j] < 0) and (events[j][0] >= last_tki):
+                        # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
+                        # Mark as invalid
+                        valid_mask_ikj[i][k,j] = 0
+                        continue
+                    # Update last index for dim `j`
+                    l = max(last_idx_tlj[j], 0)
+                    while (events[j][l] < float(last_tki)):
+                        l += 1
+                        if l == n_jumps[j]:
+                            break
+                    l -= 1
+                    last_idx_tlj[int(j)] = int(l)
+                    # Set delta_ijk
+                    delta_ikj[i][k,j] = last_tki - events[j][l]
+            last_tki = tki
+        return delta_ikj, valid_mask_ikj    
 
 
 class WoldModel(Model):
@@ -73,66 +118,41 @@ class WoldModel(Model):
         self._init_cache()
 
     def _init_cache(self):
+        events_ = [ev.numpy() for ev in self.events]
+        self.delta_ikj, self.valid_mask_ikj = _wold_model_init_cache(events_)
+        self.delta_ikj = [torch.tensor(self.delta_ikj[i], dtype=torch.float) for i in range(self.dim)]
+        self.valid_mask_ikj = [torch.tensor(self.valid_mask_ikj[i], dtype=torch.float) for i in range(self.dim)]
         
-        self.delta_ijk = {
-            i: torch.zeros((self.dim, self.n_jumps_per_dim[i])) 
-            for i in range(self.dim)}
-        self.valid_mask_ijk = {
-            i: torch.ones((self.dim, self.n_jumps_per_dim[i]), dtype=torch.bool) 
-            for i in range(self.dim)}
-        
-        # For each reiceiving dimension
-        for i in range(self.dim):
-            last_idx_tlj = {j: None for j in range(self.dim)}
-            last_tki = None
-            
-            # For each observed event, compute the inter-arrival time with
-            # each dimension
-            for k in range(self.n_jumps_per_dim[i]):
-                if k == 0:
-                    # Delta should be ignored for the first event.
-                    # Mark has invalid
-                    self.valid_mask_ijk[i][:,k] = 0
-                    continue
-                last_tki = self.events[i][k-1]
-                # For each incoming dimension
-                for j in range(self.dim):
-                    if (last_idx_tlj[j] is None) and (self.events[j][0] >= last_tki):
-                        # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
-                        # Mark as invalid
-                        self.valid_mask_ijk[i][j,k] = 0
-                        continue
-                    # Update last index for dim `j`
-                    l = last_idx_tlj[j] or 0
-                    while (self.events[j][l] < last_tki):
-                        l += 1
-                        if l == self.n_jumps_per_dim[j]:
-                            break
-                    l -= 1
-                    last_idx_tlj[j] = l
-                    # Set delta_ijk
-                    self.delta_ijk[i][j,k] = last_tki - self.events[j][l]
 
-    def log_likelihood(self, mu, alpha, beta):
-        """Log likelihood of Hawkes Process for the given parameters mu and W
+    def log_likelihood(self, coeffs):
+        """Log likelihood of Hawkes Process for the given parameters.
+        The parameters `coeffs` of the model are parameterized as a 
+        one-dimensional tensor with $[\mu, \beta, \alpha]$. To get each set of 
+        parameters back, do:
+        
+        ```
+        mu = coeffs[:dim]
+        beta = coeffs[dim:2*dim]
+        W = coeffs[2*dim:].reshape(dim, dim)
+        ```
 
         Arguments:
         ----------
-        mu : torch.Tensor
-            Exogenous intensities (shape: dim x 1)
-        alpha : torch.Tensor
-            Endogenous weights for each pair of nodes (shape: dim x dim)
-            This is the scaling parameters in the numerator of the excitation function
-        beta : torch.Tensor
-            Excitation weights for each node (shape: dim x 1)
-            This is the denominator of the excitation function for each node
+        coeffs : torch.Tensor
+            Parameters of the model (shape: (dim^2 + 2 dim) x 1)
         """
+        # Extract each set of parameters
+        mu = coeffs[:self.dim]
+        beta = coeffs[self.dim:2*self.dim]
+        alpha = coeffs[2*self.dim:].reshape(self.dim, self.dim)
+        # Compute the log-likelihood
         log_like = 0
         for i in range(self.dim):
-            lam_ik_arr = torch.zeros(self.n_jumps_per_dim[i])
-            for k in range(self.n_jumps_per_dim[i]):
-                lam_ik_arr[k] = mu[i] + torch.sum(self.valid_mask_ijk[i][:,k] * alpha[:,i] / (beta + self.delta_ijk[i][:,k]))
+            # Compute the intensity at each event
+            lam_ik_arr = mu[i] + torch.sum(self.valid_mask_ikj[i] * alpha[:,i] /(beta.unsqueeze(0) + self.delta_ikj[i]), axis=1)
+            # Add the log-intensity term
             log_like += lam_ik_arr[:-1].log().sum()
+            # Subtract the integral term
             log_like -= lam_ik_arr[0] * self.events[i][0]
             log_like -= torch.sum(lam_ik_arr[1:] * (self.events[i][1:] - self.events[i][:-1]))
         return log_like

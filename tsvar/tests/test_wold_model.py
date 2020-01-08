@@ -16,20 +16,16 @@ def test_wold_model():
     end_time = 10.0
     # Parameters of the model, to evaluate the log-likelihood
     mu = torch.tensor([0.2, 0.1])
-    A = torch.tensor([
-        [0.1, 0.9],
-        [0.4, 0.6]
-    ])
     beta = torch.tensor([1.0, 2.0])
-
+    A = torch.tensor([[0.1, 0.9],
+                      [0.4, 0.6]])
+    coeffs = torch.cat((mu, beta, A.flatten()))
     # Create an instance of `WoldModel`, set the data and evaluate the 
     # log-likelihood
     model = tsvar.wold_model.WoldModel()
     model.set_data(events, end_time)
-    ll_computed = model.log_likelihood(mu, A, beta)
+    ll_computed = model.log_likelihood(coeffs)
 
-    
-    
     # Define the groud-truth intensity at each observed event
     lam_true = [
         np.array([
@@ -61,7 +57,6 @@ def test_wold_model():
     )
 
     assert np.isclose(ll_computed, ll_true)
-
     print('Test succeeded!')
 
 if __name__ == "__main__":

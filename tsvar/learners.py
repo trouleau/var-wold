@@ -25,8 +25,6 @@ class MLELearner(object):
         self.coeffs_prev = None
 
     def _set_data(self, events, end_time):
-        if not isinstance(events[0], list) and isinstance(events[0][0], np.ndarray):
-            raise TypeError('Invalid `events` provided')
         self.dim = len(events)
         self.model.set_data(events, end_time)
 
@@ -44,7 +42,7 @@ class MLELearner(object):
         self.coeffs = x0.clone().detach().requires_grad_(True)
         self.coeffs_prev = self.coeffs.detach().clone()
         # Reset optimizer
-        self.optimizer = type(self.optimizer)([self.coeffs], **self.optimizer.defaults)
+        self.optimizer = type(self.optimizer)([self.coeffs], self.optimizer.param_groups[0]['lr'])
         for t in range(self.max_iter):
             self._n_iter_done = t
             
@@ -53,12 +51,19 @@ class MLELearner(object):
             self._loss = -1.0 * self.model.log_likelihood(self.coeffs) - 1.0 * self.prior.logprior(self.coeffs)
             
             self._loss.backward()
+
+            # print('\n------', t)
+            # print(self.coeffs)  
+            # print(self.coeffs.grad)
+
             self.optimizer.step()
+
             self.coeffs.requires_grad = False
             self.coeffs.abs_()
             self.coeffs.requires_grad = True
+
             # Check that the optimization did not fail
-            if torch.isnan(self.coeffs).any():
+            if torch.isnan(self.coeffs).any() or torch.isnan(self._loss):
                 raise ValueError('NaNs in coeffs! Stop optimization...')
             # Convergence check
             if self._check_convergence():

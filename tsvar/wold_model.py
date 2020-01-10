@@ -113,7 +113,7 @@ class WoldModel(Model):
         # Total number of events
         self.n_jumps = sum(self.n_jumps_per_dim)
         # Number of parameters of the model
-        self.n_params = self.dim * (self.dim + 2)
+        self.n_params = self.dim * (self.dim - 1) + self.dim + self.dim
         # Init cache if necessary
         self._init_cache()
 

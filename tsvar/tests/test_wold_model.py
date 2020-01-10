@@ -4,8 +4,8 @@ import torch
 import tsvar
 
 
-def test_wold_model():
-    print('Testing: WoldModel.log_likelihood...')
+def test_wold_model_loglikelihood():
+    print('\nTesting: WoldModel.log_likelihood:')
 
     # Toy events
     events = [
@@ -57,7 +57,60 @@ def test_wold_model():
     )
 
     assert np.isclose(ll_computed, ll_true)
-    print('Test succeeded!')
+    print('  - Test succeeded!')
+
+
+def test_wold_model_mle():
+    print('\nTesting: WoldModel MLE:')
+
+    print('  - Generate random model parameters...')
+    # Define random parameters
+    dim = 2  # Dimensionality of the process
+    end_time = 2e5  # Choose a long observation window
+    mu = torch.tensor([0.3, 0.1])
+    beta = torch.tensor([1.11, 1.5])
+    alpha = torch.tensor([
+        [0.7, 0.3],
+        [0.1, 0.9]
+    ])
+    coeffs_true = torch.cat((mu, beta, alpha.flatten())).numpy()
+    print('  - Simulate lots data...')
+    np.random.seed(42)  # Fix random seed for data generation
+    # Simulate lots of data
+    wold_sim = tsvar.simulate.GrangeBuscaSimulator(
+        mu_rates=mu, Alpha_ba=alpha, Beta_b=beta)
+    events = wold_sim.simulate(end_time)
+    events = [torch.tensor(ev, dtype=torch.float) for ev in events]
+    print((f"    - Simulated {sum(map(len, events)):,d} events "
+           f"with end time: {end_time}"))
+    print('  - Run MLE...')
+    # Run MLE inference
+    model = tsvar.wold_model.WoldModel()
+    model.set_data(events, end_time)
+    coeffs_start = torch.cat((
+        0.5 * torch.ones(dim, dtype=torch.float),
+        2.0 * torch.ones(dim, dtype=torch.float),
+        0.5 * torch.ones((dim, dim), dtype=torch.float).flatten()
+    ))
+    C = 10000.0 * torch.ones(len(coeffs_true))
+    prior = tsvar.priors.GaussianPrior(dim=None, n_params=len(coeffs_true), C=C)
+    optimizer = torch.optim.Adam([coeffs_start], lr=0.05)
+    learner = tsvar.learners.MLELearner(model=model, prior=prior, 
+        optimizer=optimizer, tol=1e-5, max_iter=100000, debug=False)
+    learner_callback = tsvar.utils.callbacks.LearnerCallbackMLE(
+        coeffs_start, coeffs_true, print_every=10)
+    coeffs_hat = learner.fit(
+        events, end_time, coeffs_start, callback=learner_callback)
+    coeffs_hat = coeffs_hat.detach().numpy()
+    max_diff = np.max(np.abs(coeffs_true - coeffs_hat))
+    print(f'  - coeffs_hat:  {coeffs_hat.round(2)}')
+    print(f'  - coeffs_true: {coeffs_true.round(2)}')
+    print(f'  - max_diff: {max_diff:.4f}')
+    if max_diff < 0.1:
+        print('  - Test succeeded!')
+    else:
+        print('  - Test FAILED!')
 
 if __name__ == "__main__":
-    test_wold_model()
+    test_wold_model_loglikelihood()
+    test_wold_model_mle()

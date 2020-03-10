@@ -11,9 +11,9 @@ class MLELearner(object):
 
     def __init__(self, model, prior, optimizer, tol=1e-4, max_iter=10000, debug=False):
         if not isinstance(model, wold_model.Model):
-            raise ValueError("`model` should be a `HawkesModel` object")
+            raise ValueError("`model` should be a `Model` object")
         if not isinstance(prior, priors.Prior):
-            raise ValueError("`prior` should be a `priors` object")
+            raise ValueError("`prior` should be a `Prior` object")
         self.model = model
         self.prior = prior
         self.optimizer = optimizer
@@ -78,12 +78,13 @@ class MLELearner(object):
 
 class VariationalInferenceLearner(object):
 
-    def __init__(self, model, optimizer, tol=1e-5, lr_gamma=0.9999, max_iter=10000,
+    def __init__(self, model, optimizer, tol=1e-5, lr=0.05, lr_gamma=0.9999, max_iter=10000,
                  hyperparam_interval=100, hyperparam_offset=0, hyperparam_momentum=0.5, debug=False):
-        if not isinstance(model, models.ModelHawkesVariational):
-            raise ValueError("`model` should be a `ModelHawkesVariational` object")
+        if not isinstance(model, models.ModelVariational):
+            raise ValueError("`model` should be a `ModelVariational` object")
         self.model = model
         self.optimizer = optimizer
+        self.lr = lr
         self.lr_gamma = lr_gamma
         self.tol = tol
         self.max_iter = int(max_iter)
@@ -102,7 +103,6 @@ class VariationalInferenceLearner(object):
         self.model.set_data(events, end_time)
 
     def _check_convergence(self):
-
         if torch.abs(self.coeffs - self.coeffs_prev).max() < self.tol:
             return True
         self.coeffs_prev = self.coeffs.detach().clone()
@@ -116,18 +116,25 @@ class VariationalInferenceLearner(object):
         self.coeffs = x0.clone().detach().requires_grad_(True)
         self.coeffs_prev = self.coeffs.detach().clone()
         # Reset optimizer
-        self.optimizer = type(self.optimizer)([self.coeffs], **self.optimizer.defaults)
-        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer,
-                                                                gamma=self.lr_gamma)
+        self.optimizer = type(self.optimizer)([self.coeffs], lr=self.lr)
+        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            self.optimizer, gamma=self.lr_gamma)
+        
         for t in range(self.max_iter):
             self._n_iter_done = t
-            
+
+            # print(self.coeffs)
+
             # Gradient update
             self.optimizer.zero_grad()
-            val = -1.0 * self.model.objective(self.coeffs)
-            val.backward()
+            self._loss = -1.0 * self.model.objective(self.coeffs)
+            self._loss.backward()
             self.optimizer.step()
             self.scheduler.step()
+
+            # print(self._loss)
+
+            # print(self.coeffs)
 
             # Check that the optimization did not fail
             if torch.isnan(self.coeffs).any():
@@ -142,6 +149,9 @@ class VariationalInferenceLearner(object):
                 callback(self)
             # Update hyper-parameters
             if (t+1) % self.hyperparam_interval == 0 and t > self.hyperparam_offset:
-                self.model.hyper_parameter_learn(self.coeffs.detach(),
-                                                 momentum=self.hyperparam_momentum)
+                
+                print('Update hyper-parameters')
+                
+                self.model.hyper_parameter_learn(
+                    self.coeffs.detach(), momentum=self.hyperparam_momentum)
         return self.coeffs

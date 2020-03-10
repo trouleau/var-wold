@@ -50,8 +50,8 @@ class LogNormalPosterior(Posterior):
     def logpdf(self, eps, alpha, beta):
         z = self.g(eps, alpha, beta)
         sigma = beta.exp()
-        log_phi = self.norm.log_prob((z.log() - alpha) / sigma)
-        return torch.sum(log_phi - sigma.log() - z.log())
+        log_phi = self.norm.log_prob((z.log() - alpha) / (sigma + 1e-10))
+        return torch.sum(log_phi - (sigma + 1e-10).log() - z.log())
 
     def mode(self, alpha, beta):
         return torch.exp(alpha - beta.exp() ** 2)

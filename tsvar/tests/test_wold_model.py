@@ -63,7 +63,7 @@ def test_wold_model_loglikelihood():
 def test_wold_model_mle():
     print('\nTesting: WoldModel MLE:')
 
-    print('  - Generate random model parameters...')
+    print('  - Define model parameters...')
     # Define random parameters
     dim = 2  # Dimensionality of the process
     end_time = 2e5  # Choose a long observation window
@@ -71,7 +71,7 @@ def test_wold_model_mle():
     beta = torch.tensor([1.11, 1.5])
     alpha = torch.tensor([
         [0.7, 0.3],
-        [0.1, 0.9]
+        [0.0, 1.0]
     ])
     coeffs_true = torch.cat((mu, beta, alpha.flatten())).numpy()
     print('  - Simulate lots data...')
@@ -84,7 +84,7 @@ def test_wold_model_mle():
     print((f"    - Simulated {sum(map(len, events)):,d} events "
            f"with end time: {end_time}"))
     print('  - Run MLE...')
-    # Run MLE inference
+    # Define model
     model = tsvar.wold_model.WoldModel()
     model.set_data(events, end_time)
     coeffs_start = torch.cat((
@@ -92,13 +92,17 @@ def test_wold_model_mle():
         2.0 * torch.ones(dim, dtype=torch.float),
         0.5 * torch.ones((dim, dim), dtype=torch.float).flatten()
     ))
+    # Define penalty
     C = 10000.0 * torch.ones(len(coeffs_true))
-    prior = tsvar.priors.GaussianPrior(dim=None, n_params=len(coeffs_true), C=C)
+    prior = tsvar.priors.GaussianPrior(dim=None, C=C)
+    # Define optimizer
     optimizer = torch.optim.Adam([coeffs_start], lr=0.05)
+    # Define the learner
     learner = tsvar.learners.MLELearner(model=model, prior=prior, 
         optimizer=optimizer, tol=1e-5, max_iter=100000, debug=False)
     learner_callback = tsvar.utils.callbacks.LearnerCallbackMLE(
         coeffs_start, coeffs_true, print_every=10)
+    # Fit the model
     coeffs_hat = learner.fit(
         events, end_time, coeffs_start, callback=learner_callback)
     coeffs_hat = coeffs_hat.detach().numpy()
@@ -107,7 +111,7 @@ def test_wold_model_mle():
     print(f'  - coeffs_true: {coeffs_true.round(2)}')
     print(f'  - max_diff: {max_diff:.4f}')
     if max_diff < 0.1:
-        print('  - Test succeeded!')
+        print('  - Test succeeded! (max_diff < 0.1)')
     else:
         print('  - Test FAILED!')
 

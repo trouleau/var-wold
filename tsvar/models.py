@@ -2,44 +2,43 @@ import numpy as np
 
 import torch
 
+from .wold_model import Model, WoldModel
 from .utils import softmax
 from .posteriors import Posterior
 from .priors import Prior
 
 
-class ModelHawkesVariational:
+class ModelVariational:
 
-    def __init__(self, model, posterior, prior, n_samples, n_weights, weight_temp=1, device='cpu'):
+    def __init__(self, model, posterior, prior, n_samples, n_weights=1, weight_temp=1, device='cpu'):
         """
         Initialize the model
 
         Arguments:
         ----------
-        model : HawkesModel
-            Hawkes process object that implements the log-likelihood
+        model : Model
+            Model object that implements the log-likelihood function
         posterior : Posterior
             Posterior object
         prior : Prior
             Prior object
         n_samples : int
             Number of samples used fort he Monte Carlo estimate of expectations
-        n_weights : int
+        n_weights : int (optional, default: 1)
             Number of samples used for the importance weighted posterior
-        C : float
-            Inverse weight of the regularizer
-        weight_temp : float
+        weight_temp : float (optional, default: 1)
             Tempering weight of the importance weights
         """
-        if not isinstance(model, HawkesModel):
-            raise ValueError("`model` should be a `HawkesModel` object")
+        if not isinstance(model, Model):
+            raise ValueError("`model` should be a `Model` object")
         self.model = model
         if not isinstance(posterior, Posterior):
             raise ValueError("`posterior` should be a `Posterior` object")
         self.posterior = posterior
         if not isinstance(prior, Prior):
             raise ValueError("`prior` should be a `Prior` object")
-        self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
         self.prior = prior
+        self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
         self.n_samples = n_samples
         self.n_weights = n_weights
         self.weight_temp = weight_temp
@@ -60,7 +59,9 @@ class ModelHawkesVariational:
         # Set various util attributes
         self.dim = len(events)
         self.n_jumps = sum(map(len, events))
-        self.n_params = self.dim * (self.model.excitation.M * self.dim + 1)
+        # Parameters of the model
+        self.n_params = self.model.n_params
+        # Parameters of the posterior (mean and log-std of parameters)
         self.n_var_params = 2 * self.n_params
 
     def _log_importance_weight(self, eps, alpha, beta):
@@ -69,15 +70,13 @@ class ModelHawkesVariational:
         """
         # Reparametrize the variational parameters
         z = self.posterior.g(eps, alpha, beta)
-        # Split and reshape parameters
-        mu = z[:self.dim]
-        W = z[self.dim:].reshape(self.dim, self.dim, self.model.excitation.M)
-        # Compute log-posterior
-        logpost = self.posterior.logpdf(eps, alpha, beta)
         # Evaluate the log-likelihood
-        loglik = self.model.log_likelihood(mu, W)
+        loglik = self.model.log_likelihood(z)
         # Compute the log-prior
         logprior = self.prior.logprior(z)
+        # Compute log-posterior
+        logpost = self.posterior.logpdf(eps, alpha, beta)
+        # print(f"{loglik:.2f} + {logprior:.2f} - {logpost:.2f}")
         return loglik + logprior - logpost
 
     def _objective_l(self, eps_l, alpha, beta):
@@ -144,8 +143,7 @@ class ModelHawkesVariational:
         # Compute the weighted average over all `n_weights` samples
         opt_C = torch.matmul(w_tilde.unsqueeze(0), opt_C_now).squeeze().to(self.device)
         self.prior.C = (1-momentum) * opt_C + momentum * self.prior.C
-        # self.prior.C = np.clip(self.prior.C, 1e-5, 1e3)
-
+ 
     def _sample_from_expected_importance_weighted_distribution(self, eps_arr_l, alpha, beta):
         # Reparametrize the variational parameters
         log_w_arr = torch.zeros(self.n_weights, dtype=torch.float64)

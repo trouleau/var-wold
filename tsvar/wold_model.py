@@ -197,7 +197,7 @@ def solve_halley(func, fprime, fprime2, x0, ab3, b, u, max_iter, tol):
 
 
 @numba.jit(nopython=True)
-def _compute_C_ik(ar_pr, as_po, delta_ikj, n_jumps):
+def _compute_C_ik(ar_pr, as_po, delta_ikj, valid_mask_ikj, n_jumps):
     dim = len(n_jumps)
     vals = [np.zeros(n_jumps[i]) for i in range(dim)]
     all_conv = True
@@ -205,7 +205,7 @@ def _compute_C_ik(ar_pr, as_po, delta_ikj, n_jumps):
         for k in range(n_jumps[i]):
             a = as_po[:, i]
             # TODO: make sure that `delta_ikj` is evaluated at correct index
-            b = 1 / ((1 + delta_ikj[i][k, :]) * ar_pr[:, i])
+            b = valid_mask_ikj[i][k, :] * 1 / ((1 + delta_ikj[i][k, :]) * ar_pr[:, i])
             ab3 = a * b**3
             u = np.sum(a * b)
             x0 = 0.5 * (b.max() - u / a.sum())  # Middle between min and max theoretical bounds
@@ -227,12 +227,13 @@ def _update_alpha(as_pr, zp_po, n_jumps, lamb):
     return as_po
 
 
-def _update_z(ar_pr, as_po, C_ik, delta_ikj):
+def _update_z(ar_pr, as_po, C_ik, delta_ikj, valid_mask_ikj):
     dim = len(delta_ikj)
     zp = list()
     for i in range(dim):
-        Dbi_kj = 1 / ((1 + delta_ikj[i]) * ar_pr[:, i])
+        Dbi_kj = valid_mask_ikj[i] * 1 / ((1 + delta_ikj[i]) * ar_pr[:, i])
         Fi_k = np.sum(as_po[:, i] * Dbi_kj, axis=1) / C_ik[i]
+        print(C_ik[i].min(), C_ik[i].max())
         epi = (digamma(as_po[np.newaxis, :, i]) + np.log(Dbi_kj)
                - digamma(Fi_k[:, np.newaxis]) - np.log(C_ik[i][:, np.newaxis]))
         epi = np.exp(epi)
@@ -245,13 +246,16 @@ class VariationalWoldModel(WoldModel):
 
     def set_data(self, events, end_time=None):
         super().set_data(events, end_time)
-        # TODO: remove this once virtual events in fixed in parent class
+        # TODO: fix this once virtual events in fixed in parent class
         # Remove virtual event
         for i in range(self.dim):
             self.events[i] = self.events[i][:-1].numpy()
             self.delta_ikj[i] = np.hstack((
                 np.zeros((self.n_jumps[i]-1, 1)),
                 self.delta_ikj[i][:-1, :].numpy()))
+            self.valid_mask_ikj[i] = np.hstack((
+                np.ones((self.n_jumps[i]-1, 1)),
+                self.valid_mask_ikj[i][:-1, :].numpy()))
         # Number of events per dimension
         self.n_jumps = np.array(list(map(len, self.events)))
 
@@ -295,6 +299,7 @@ class VariationalWoldModel(WoldModel):
             self.C_ik, all_conv = _compute_C_ik(ar_pr=self._ar_pr,
                                                 as_po=self._as_po,
                                                 delta_ikj=self.delta_ikj,
+                                                valid_mask_ikj=self.valid_mask_ikj,
                                                 n_jumps=self.n_jumps)
             if not all_conv:
                 raise RuntimeError("Some C_ik did not converge")
@@ -302,7 +307,8 @@ class VariationalWoldModel(WoldModel):
             self._zp_po = _update_z(ar_pr=self._ar_pr,
                                     as_po=self._as_po,
                                     C_ik=self.C_ik,
-                                    delta_ikj=self.delta_ikj)
+                                    delta_ikj=self.delta_ikj,
+                                    valid_mask_ikj=self.valid_mask_ikj)
 
             print('Z posterior probabilities')
             print(self._zp_po[0])

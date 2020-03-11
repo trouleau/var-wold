@@ -168,74 +168,24 @@ class WoldModel(Model):
 
 
 @numba.jit(nopython=True)
-def func(x, ab3, b, u):
-    return float(np.sum(ab3 / (b + x)**2) - u / 4)
-
-
-@numba.jit(nopython=True)
-def fprime(x, ab3, b):
-    return float(-2 * np.sum(ab3 / (b + x)**3))
-
-
-@numba.jit(nopython=True)
-def fprime2(x, ab3, b):
-    return float(6 * np.sum(ab3 / (b + x)**4))
-
-
-@numba.jit(nopython=True)
-def solve_halley(func, fprime, fprime2, x0, ab3, b, u, max_iter, tol):
-    x = float(x0)
-    for it in range(max_iter):
-        f = func(x, ab3, b, u)
-        fp = fprime(x, ab3, b)
-        fpp = fprime2(x, ab3, b)
-        x_new = x - (2 * f * fp) / (2 * fp**2 - f * fpp)
-        if abs(x - x_new) < tol:
-            return x, True
-        x = x_new
-    return x, False
-
-
-@numba.jit(nopython=True)
-def _compute_C_ik(ar_pr, as_po, delta_ikj, valid_mask_ikj, n_jumps):
-    dim = len(n_jumps)
-    vals = [np.zeros(n_jumps[i]) for i in range(dim)]
-    all_conv = True
-    for i in range(dim):
-        for k in range(n_jumps[i]):
-            a = as_po[:, i]
-            # TODO: make sure that `delta_ikj` is evaluated at correct index
-            b = valid_mask_ikj[i][k, :] * 1 / ((1 + delta_ikj[i][k, :]) * ar_pr[:, i])
-            ab3 = a * b**3
-            u = np.sum(a * b)
-            x0 = 0.5 * (b.max() - u / a.sum())  # Middle between min and max theoretical bounds
-            vals[i][k], conv = solve_halley(func, fprime, fprime2, x0, ab3, b,
-                                            u, max_iter=10, tol=1e-3)
-            all_conv = all_conv & conv
-            if not all_conv:
-                return vals, all_conv
-    return vals, all_conv
-
-
-@numba.jit(nopython=True)
-def _update_alpha(as_pr, zp_po, n_jumps, lamb):
-    dim = len(n_jumps)
+def _update_alpha(as_pr, ar_pr, zp_po, D_ikj):
+    dim = as_pr.shape[1]
     as_po = np.zeros_like(as_pr)  # Alpha posterior shape, to return
+    ar_po = np.zeros_like(as_pr)  # Alpha posterior rate, to return
     for i in range(dim):
-        as_po[:, i] = (as_pr[:, i] + zp_po[i].sum(axis=0)
-                       - n_jumps[i] / lamb[i])
-    return as_po
+        as_po[:, i] = (as_pr[:, i] + zp_po[i].sum(axis=0))
+        ar_po[:, i] = (ar_pr[:, i] + D_ikj[i].sum(axis=0))
+    return as_po, ar_po
 
 
-def _update_z(ar_pr, as_po, C_ik, delta_ikj, valid_mask_ikj):
-    dim = len(delta_ikj)
+def _update_z(as_po, ar_po, D_ikj):
+    dim = len(D_ikj)
     zp = list()
     for i in range(dim):
-        Dbi_kj = valid_mask_ikj[i] * 1 / ((1 + delta_ikj[i]) * ar_pr[:, i])
-        Fi_k = np.sum(as_po[:, i] * Dbi_kj, axis=1) / C_ik[i]
-        print(C_ik[i].min(), C_ik[i].max())
-        epi = (digamma(as_po[np.newaxis, :, i]) + np.log(Dbi_kj)
-               - digamma(Fi_k[:, np.newaxis]) - np.log(C_ik[i][:, np.newaxis]))
+        epi = (digamma(as_po[np.newaxis, :, i])
+               - np.log(ar_po[np.newaxis, :, i])
+               + np.log(D_ikj[i] + 1e-10))
+        # epi -= np.max(epi, axis=1)[:, np.newaxis]
         epi = np.exp(epi)
         epi /= epi.sum(axis=1)[:, np.newaxis]
         zp.append(epi)
@@ -247,26 +197,34 @@ class VariationalWoldModel(WoldModel):
     def set_data(self, events, end_time=None):
         super().set_data(events, end_time)
         # TODO: fix this once virtual events in fixed in parent class
-        # Remove virtual event
+        self.D_ikj = [np.zeros_like(arr) for arr in self.delta_ikj]
         for i in range(self.dim):
             self.events[i] = self.events[i][:-1].numpy()
-            self.delta_ikj[i] = np.hstack((
-                np.zeros((self.n_jumps[i]-1, 1)),
-                self.delta_ikj[i][:-1, :].numpy()))
-            self.valid_mask_ikj[i] = np.hstack((
+            valid_mask_ikj_i = np.hstack((
                 np.ones((self.n_jumps[i]-1, 1)),
                 self.valid_mask_ikj[i][:-1, :].numpy()))
+            delta_ikj_i = np.hstack((
+                np.zeros((self.n_jumps[i]-1, 1)),
+                self.delta_ikj[i][:-1, :].numpy()))
+            dts = np.hstack((self.events[i][0], np.diff(self.events[i])))
+            self.D_ikj[i] = (valid_mask_ikj_i
+                             * dts[:, np.newaxis]
+                             / (1 + delta_ikj_i))
+            self.D_ikj[i][~valid_mask_ikj_i.astype(bool)] = 1e-20
+        # Remove `delta_ikj` and `valid_mask_ikj`, we only need `D_ikj` to fit
+        del self.delta_ikj
+        del self.valid_mask_ikj
         # Number of events per dimension
         self.n_jumps = np.array(list(map(len, self.events)))
 
     @enforce_fitted
-    def fit(self, *, as_pr, ar_pr, zc_pr, lamb, max_iter=100, tol=1e-5):
+    def fit(self, *, as_pr, ar_pr, zc_pr, max_iter=100, tol=1e-5):
         self._as_pr = as_pr  # Alpha prior, shape of Gamma distribution
         self._ar_pr = ar_pr  # Alpha prior, rate of Gamma distribution
         self._zc_pr = zc_pr  # Z prior, concentration
-        self._lamb = lamb
 
         self._as_po = self._as_pr.copy()  # Alpha posterior, shape of Gamma distribution
+        self._ar_po = self._ar_pr.copy()  # Alpha posterior, rate of Gamma distribution
 
         self._zp_po = list()
         for i in range(self.dim):
@@ -274,41 +232,30 @@ class VariationalWoldModel(WoldModel):
             self._zp_po.append((self._zc_pr[i]
                                 / self._zc_pr[i].sum(axis=1)[:, np.newaxis]))
 
-        print('-'*50, 0)
-        print('Alpha posterior shape:')
-        print(self._as_po)
-        print('Z posterior probabilities')
-        print(self._zp_po[0])
+        # print('-'*50, 0)
+        # print('Alpha posterior mean:')
+        # print(np.round(self._as_po / self._ar_po, 2))
+        # print('Z[0] posterior probabilities')
+        # print(self._zp_po[0])
 
         for i in range(max_iter):
-            print('-'*50, i+1)
+            # print('-'*50, i+1)
 
-            print(self.n_jumps)
+            self._as_po, self._ar_po = _update_alpha(as_pr=self._as_pr,
+                                                     ar_pr=self._ar_pr,
+                                                     zp_po=self._zp_po,
+                                                     D_ikj=self.D_ikj)
 
-            self._as_po = _update_alpha(as_pr=self._as_pr,
-                                        zp_po=self._zp_po,
-                                        n_jumps=self.n_jumps,
-                                        lamb=self._lamb)
-
-            print('Alpha posterior shape:')
-            print(self._as_po)
+            # print('Alpha posterior mean:')
+            # print(np.round(self._as_po / self._ar_po, 2))
             if self._as_po.min() < 0:
-                raise RuntimeError("Negative alpha!")
+                raise RuntimeError("Negative alpha shape!")
+            if self._as_po.min() < 0:
+                raise RuntimeError("Negative alpha rate!")
 
-            # Cache `C_ik` values
-            self.C_ik, all_conv = _compute_C_ik(ar_pr=self._ar_pr,
-                                                as_po=self._as_po,
-                                                delta_ikj=self.delta_ikj,
-                                                valid_mask_ikj=self.valid_mask_ikj,
-                                                n_jumps=self.n_jumps)
-            if not all_conv:
-                raise RuntimeError("Some C_ik did not converge")
+            self._zp_po = _update_z(as_po=self._as_po,
+                                    ar_po=self._ar_po,
+                                    D_ikj=self.D_ikj)
 
-            self._zp_po = _update_z(ar_pr=self._ar_pr,
-                                    as_po=self._as_po,
-                                    C_ik=self.C_ik,
-                                    delta_ikj=self.delta_ikj,
-                                    valid_mask_ikj=self.valid_mask_ikj)
-
-            print('Z posterior probabilities')
-            print(self._zp_po[0])
+            # print('Z posterior probabilities')
+            # print(self._zp_po[0])

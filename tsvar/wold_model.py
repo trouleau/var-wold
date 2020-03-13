@@ -174,7 +174,7 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, last_t):
     ar_po = np.zeros_like(as_pr)  # Alpha posterior rate, to return
     for i in range(dim):
         as_po[:, i] = as_pr[:, i] + zp_po[i].sum(axis=0)
-        ar_po[0, i] = ar_pr[0, i]
+        ar_po[0, i] = ar_pr[0, i] + last_t[i]
         ar_po[1:, i] = ar_pr[1:, i] + (bs_po[:, i] / br_po[:, i]) * last_t[i]
     return as_po, ar_po
 
@@ -200,9 +200,8 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj):
         epi = np.zeros_like(delta_ikj[i])
         epi += (digamma(as_po[np.newaxis, :, i])
                 - np.log(ar_po[np.newaxis, :, i]))
-        epi[:, 1:] += (np.log(br_po[:, i]) - digamma(bs_po[:, i])
-                       + ((delta_ikj[i][:, 1:] + 1) * br_po[:, i]
-                          / (bs_po[:, i] - 1)))
+        epi[:, 1:] -= (np.log(br_po[:, i]) - digamma(bs_po[:, i])
+                       + (delta_ikj[i][:, 1:] + 1) * bs_po[:, i] / br_po[:, i])
         # Softmax
         epi = epi - epi.max(axis=1)[:, np.newaxis]
         epi = np.exp(epi)

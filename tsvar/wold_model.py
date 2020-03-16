@@ -188,7 +188,7 @@ def _update_beta(bs_pr, br_pr, zp_po, as_po, ar_po, delta_ikj, last_t):
         bs_po[:, i] = bs_pr[:, i] + np.sum(zp_po[i][:, 1:], axis=0)
         br_po[:, i] = (br_pr[:, i]
                        + np.sum(zp_po[i][:, 1:] * delta_ikj[i][:, 1:], axis=0)
-                       + (as_po[1:, i] / ar_po[1:, i]) * last_t[i])
+                       + as_po[1:, i] / ar_po[1:, i] * last_t[i])
     return bs_po, br_po
 
 
@@ -201,9 +201,9 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj):
         epi += (digamma(as_po[np.newaxis, :, i])
                 - np.log(ar_po[np.newaxis, :, i]))
         epi[:, 1:] -= (np.log(br_po[:, i]) - digamma(bs_po[:, i])
-                       + (delta_ikj[i][:, 1:] + 1) * bs_po[:, i] / br_po[:, i])
+                       + (delta_ikj[i][:, 1:]) * bs_po[:, i] / br_po[:, i])
         # Softmax
-        epi = epi - epi.max(axis=1)[:, np.newaxis]
+        epi = epi  # - epi.max(axis=1)[:, np.newaxis]
         epi = np.exp(epi)
         epi /= epi.sum(axis=1)[:, np.newaxis]
         zp.append(epi)

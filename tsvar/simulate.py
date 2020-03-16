@@ -14,13 +14,13 @@ class GrangerBuscaSimulator(object):
         self.mu_rates = np.asanyarray(mu_rates)
         assert len(self.mu_rates.shape) == 1
         self.dim = len(self.mu_rates)
-        
+
         self.Alpha_ba = np.asanyarray(Alpha_ba)
         assert self.Alpha_ba.shape == (self.dim, self.dim)
-        
-        self.Beta_b = np.asanyarray(Beta_b)[:,np.newaxis] 
-        assert self.Beta_b.shape == (self.dim,1)
-       
+
+        self.Beta_b = np.asanyarray(Beta_b)[:, np.newaxis]
+        assert self.Beta_b.shape == (self.dim, 1)
+
         self.events = [[] for i in range(self.dim)]
         self.last = np.nan * np.zeros(self.dim)
         self.delta = np.nan * np.zeros((self.dim, self.dim))
@@ -52,11 +52,11 @@ class GrangerBuscaSimulator(object):
     #             # If no past event prior to tp, then no excitation
     #             if tpp >= tp:
     #                 continue
-                
+
     #             # If `tpp` successfully found, add to rate
     #             busca_rate = self.Alpha_ba[proc_b, proc_a]
     #             busca_rate /= (self.Beta_b[proc_b] + tp - tpp)
-                
+
     #             lambdas_t[proc_a] += busca_rate
     #     return lambdas_t
 
@@ -69,7 +69,7 @@ class GrangerBuscaSimulator(object):
 
     def simulate(self, forward, seed=None):
         if seed:
-            rd.seed(seed)
+            rd.seed
 
         t = self.t
         max_time = t + forward
@@ -97,9 +97,9 @@ class GrangerBuscaSimulator(object):
             self.events[i].append(t)
 
             # Update cache for intensity computation
-            self.delta[:,i] = t - self.last
+            self.delta[:, i] = t - self.last
             self.last[i] = t
 
             self.t = t
-        
+
         return list(map(np.array, self.events))

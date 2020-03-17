@@ -33,7 +33,9 @@ def _update_beta(bs_pr, br_pr, zp_po, as_po, ar_po, last_t, delta_ikj, valid_mas
                     * delta_ikj[i][:, 1:])
         Dzp_i_kj[~valid_mask_ikj[i][:, 1:].astype(bool)] = 1e-20
         br_po[:, i] = (br_pr[:, i] + Dzp_i_kj.sum(axis=0)
-                       + as_po[1:, i] / ar_po[1:, i] * np.sum(dt_ikj[i][:, np.newaxis] * valid_mask_ikj[i][:, 1:], axis=0))
+                       + (as_po[1:, i] / ar_po[1:, i]
+                          * np.sum(dt_ikj[i][:, np.newaxis]
+                          * valid_mask_ikj[i][:, 1:], axis=0)))
     return bs_po, br_po
 
 
@@ -48,7 +50,8 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
         epi[:, 1:] -= (np.log(br_po[:, i]) - digamma(bs_po[:, i])
                        + (valid_mask_ikj[i][:, 1:]
                           * (delta_ikj[i][:, 1:] + 1)
-                          * bs_po[:, i] / br_po[:, i])) - np.log(dt_ikj[i][:, np.newaxis] + 1e-10)
+                          * bs_po[:, i] / br_po[:, i])
+                       - np.log(dt_ikj[i][:, np.newaxis] + 1e-10))
         # Softmax
         epi = epi - epi.max(axis=1)[:, np.newaxis]
         epi = np.exp(epi)

@@ -14,34 +14,50 @@ class Model(metaclass=abc.ABCMeta):
     def __init__(self, verbose=False, device='cpu'):
         """Initialize the model
         """
-        self.n_jumps = None  # Total Number of jumps observed
-        self.dim = None  # Number of dimensions
-        self.n_params = None  # Number of parameters
-        self._fitted = False  # Indicate if data is properly set
         self.verbose = verbose  # Indicate verbosity behavior
         # Device to use for torch ('cpu' or 'cuda')
         self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
+        # Data-related attributes set with data in `set_data`
+        self.n_jumps = None     # Total Number of jumps observed
+        self.dim = None         # Number of dimensions
+        self.n_params = None    # Number of parameters
+        self._fitted = False    # Indicate if data is properly set
 
-    @abc.abstractmethod
     def set_data(self, events, end_time=None):
-        """Set the data for the model as well as various attributes, and cache
-        some computations for future log-likelihood calls"""
+        """
+        Set the data for the model as well as various attributes.
+        Child class must set attribute `n_params`
+        """
+        # Events must be tensor to use torch's automatic differentiation
+        assert isinstance(events, list) and isinstance(events[0], torch.Tensor), "`events` should be a list of `torch.Tensor`."
+        # Move the tensors to GPU if available
+        self.events = [num.to(self.device) for num in events]
+        self.end_time = end_time or max([max(num) for num in events if len(num) > 0])
+        self.dim = len(events)
+        self.n_jumps = list(map(len, events))
+        # Check that all dimensions have at least one event, otherwise the
+        # computation of the log-likelihood is not correct
+        assert min(self.n_jumps) > 0, "Each dimension should have at least one event."
+        # self.n_params  # set in child class
 
     @abc.abstractmethod
     def log_likelihood(self, coeffs):
         """Evaluate the log likelihood of the model for the given parameters"""
 
 
-class ModelVariational:
+class ModelBlackBoxVariational(Model):
+    """
+    Base class for models with a log-likelihood function to be learnt via
+    black-box variational inference
+    """
 
-    def __init__(self, model, posterior, prior, n_samples, n_weights=1, weight_temp=1, device='cpu'):
+    def __init__(self, posterior, prior, n_samples, n_weights=1,
+                 weight_temp=1, verbose=False, device='cpu'):
         """
         Initialize the model
 
         Arguments:
         ----------
-        model : Model
-            Model object that implements the log-likelihood function
         posterior : Posterior
             Posterior object
         prior : Prior
@@ -52,41 +68,29 @@ class ModelVariational:
             Number of samples used for the importance weighted posterior
         weight_temp : float (optional, default: 1)
             Tempering weight of the importance weights
+        verbose : bool (optional, default: False)
+            Verbosity behavior
+        device : str (optional, default: 'cpu')
+            Device for `torch` tensors
         """
-        if not isinstance(model, Model):
-            raise ValueError("`model` should be a `Model` object")
-        self.model = model
+        super().__init__(verbose=verbose, device=device)
         if not isinstance(posterior, Posterior):
             raise ValueError("`posterior` should be a `Posterior` object")
-        self.posterior = posterior
         if not isinstance(prior, Prior):
             raise ValueError("`prior` should be a `Prior` object")
-        self.prior = prior
-        self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
-        self.n_samples = n_samples
-        self.n_weights = n_weights
-        self.weight_temp = weight_temp
-        self.n_jumps = None
-        self.dim = None
-        self.n_params = None
-        self.n_var_params = None
-        self.alpha = None
-        self.beta = None
+        self.prior = prior              # Coeffs prior
+        self.posterior = posterior      # Coeffs posterior
+        self.n_samples = n_samples      # Number of samples for BBVI
+        self.n_weights = n_weights      # Number of weights for Weighted-BBVI
+        self.weight_temp = weight_temp  # Weight temperatur for Weighted-BBVI
+        # Data-related attributes set with data in `set_data`
+        self.n_var_params = None  # Number of parameters of the posterior
+        self.alpha = None         # loc/shape of the posterior
+        self.beta = None          # rate/scale of the posterior
 
     def set_data(self, events, end_time):
-        """
-        Set the data for the model
-        """
-        events = [num.to(self.device) for num in events]  # Moving the tensors to GPU if available
-        # Set the model object
-        self.model.set_data(events, end_time)
-        # Set various util attributes
-        self.dim = len(events)
-        self.n_jumps = sum(map(len, events))
-        # Parameters of the model
-        self.n_params = self.model.n_params
-        # Parameters of the posterior (mean and log-std of parameters)
-        self.n_var_params = 2 * self.n_params
+        super().set_data(events=events, end_time=end_time)
+        self.n_var_params = 2 * self.n_params  # must be set in child class
 
     def _log_importance_weight(self, eps, alpha, beta):
         """
@@ -95,7 +99,7 @@ class ModelVariational:
         # Reparametrize the variational parameters
         z = self.posterior.g(eps, alpha, beta)
         # Evaluate the log-likelihood
-        loglik = self.model.log_likelihood(z)
+        loglik = self.log_likelihood(z)
         # Compute the log-prior
         logprior = self.prior.logprior(z)
         # Compute log-posterior

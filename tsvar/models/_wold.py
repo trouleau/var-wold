@@ -72,25 +72,19 @@ class WoldModel(Model):
 
     def set_data(self, events, end_time=None):
         """Set the data for the model as well as various attributes, and cache
-        some computations for future log-likelihood calls
+        computations of inter-arrival time for future log-likelihood calls.
         """
-        # Events must be tensor to use torch's automatic differentiation
-        assert isinstance(events[0], torch.Tensor), "`events` should be a list of `torch.Tensor`."
-        # Number of dimensions
-        self.dim = len(events)
-        # End of the observation window
-        self.end_time = end_time or max([max(num) for num in events if len(num) > 0])
-        # Observed events, add a virtual event at `end_time` for easier log-likelihood computation
-        # TODO: Remove the virtual event, it's nasty and will eventually introduce bugs
+        super().set_data(events, end_time)
+        #
+        # TODO: Observed events, add a virtual event at `end_time` for easier
+        # log-likelihood computation. Remove the virtual event, it's nasty and
+        # will eventually introduce bugs.
         self.events = []
         for i in range(self.dim):
             self.events.append(torch.cat((
                 events[i], torch.tensor([self.end_time], dtype=torch.float))))
-        # Number of events per dimension
         self.n_jumps = list(map(len, self.events))
-        # Check that all dimensions have at least one event, otherwise the c
-        # omputation of the log-likelihood is not correct
-        assert min(self.n_jumps) > 0, "Each dimension should have at least one event."
+        #
         # Number of parameters of the model
         self.n_params = self.dim * self.dim + self.dim + self.dim
         # Init cache if necessary
@@ -104,7 +98,6 @@ class WoldModel(Model):
         self.valid_mask_ikj = [torch.tensor(
             self.valid_mask_ikj[i], dtype=torch.float) for i in range(self.dim)]
         self._fitted = True
-
 
     @enforce_fitted
     def log_likelihood(self, coeffs):

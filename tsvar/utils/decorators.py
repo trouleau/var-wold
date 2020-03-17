@@ -1,6 +1,8 @@
+from functools import wraps
 
 
 def enforce_fitted(fn):
+    @wraps(fn)
     def wrapped(self, *args, **kwargs):
         if self._fitted:
             return fn(self, *args, **kwargs)

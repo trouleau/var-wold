@@ -3,7 +3,6 @@ import numpy as np
 import torch
 
 from . import models
-from . import wold_model
 from . import priors
 
 
@@ -45,15 +44,15 @@ class MLELearner(object):
         self.optimizer = type(self.optimizer)([self.coeffs], self.optimizer.param_groups[0]['lr'])
         for t in range(self.max_iter):
             self._n_iter_done = t
-            
+
             # Gradient update
             self.optimizer.zero_grad()
             self._loss = -1.0 * self.model.log_likelihood(self.coeffs) - 1.0 * self.prior.logprior(self.coeffs)
-            
+
             self._loss.backward()
 
             # print('\n------', t)
-            # print(self.coeffs)  
+            # print(self.coeffs)
             # print(self.coeffs.grad)
 
             self.optimizer.step()
@@ -119,7 +118,7 @@ class VariationalInferenceLearner(object):
         self.optimizer = type(self.optimizer)([self.coeffs], lr=self.lr)
         self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
             self.optimizer, gamma=self.lr_gamma)
-        
+
         for t in range(self.max_iter):
             self._n_iter_done = t
 
@@ -149,9 +148,9 @@ class VariationalInferenceLearner(object):
                 callback(self)
             # Update hyper-parameters
             if (t+1) % self.hyperparam_interval == 0 and t > self.hyperparam_offset:
-                
+
                 print('Update hyper-parameters')
-                
+
                 self.model.hyper_parameter_learn(
                     self.coeffs.detach(), momentum=self.hyperparam_momentum)
         return self.coeffs

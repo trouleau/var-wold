@@ -1,11 +1,35 @@
+import abc
 import numpy as np
 
 import torch
 
-from .wold_model import Model, WoldModel
-from .utils import softmax
-from .posteriors import Posterior
-from .priors import Prior
+from ..utils import softmax
+from ..posteriors import Posterior
+from ..priors import Prior
+
+
+class Model(metaclass=abc.ABCMeta):
+    """Base class for models with a log-likelihood function"""
+
+    def __init__(self, verbose=False, device='cpu'):
+        """Initialize the model
+        """
+        self.n_jumps = None  # Total Number of jumps observed
+        self.dim = None  # Number of dimensions
+        self.n_params = None  # Number of parameters
+        self._fitted = False  # Indicate if data is properly set
+        self.verbose = verbose  # Indicate verbosity behavior
+        # Device to use for torch ('cpu' or 'cuda')
+        self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
+
+    @abc.abstractmethod
+    def set_data(self, events, end_time=None):
+        """Set the data for the model as well as various attributes, and cache
+        some computations for future log-likelihood calls"""
+
+    @abc.abstractmethod
+    def log_likelihood(self, coeffs):
+        """Evaluate the log likelihood of the model for the given parameters"""
 
 
 class ModelVariational:
@@ -143,7 +167,7 @@ class ModelVariational:
         # Compute the weighted average over all `n_weights` samples
         opt_C = torch.matmul(w_tilde.unsqueeze(0), opt_C_now).squeeze().to(self.device)
         self.prior.C = (1-momentum) * opt_C + momentum * self.prior.C
- 
+
     def _sample_from_expected_importance_weighted_distribution(self, eps_arr_l, alpha, beta):
         # Reparametrize the variational parameters
         log_w_arr = torch.zeros(self.n_weights, dtype=torch.float64)

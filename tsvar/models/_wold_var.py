@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.special import digamma
+import scipy.special as sc
 import numba
 
 from . import WoldModel
@@ -11,14 +11,27 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ikj, delta_ikj, valid_ma
     dim = as_pr.shape[1]
     as_po = np.zeros_like(as_pr)  # Alpha posterior shape, to return
     ar_po = np.zeros_like(as_pr)  # Alpha posterior rate, to return
+
     for i in range(dim):
         as_po[:, i] = as_pr[:, i] + zp_po[i].sum(axis=0)
-        D_i_kj = (valid_mask_ikj[i]
-                  * dt_ikj[i][:, np.newaxis]
-                  * (1 / (1 + delta_ikj[i])))
-        D_i_kj[~valid_mask_ikj[i].astype(bool)] = 1e-20
+        temp_1 = bs_po[:, i]
+        temp_1 += 1
+        D_i_kj = (valid_mask_ikj[i][:, 1:] * dt_ikj[i][:, np.newaxis] *
+                  (compute_gammainc(temp_1, br_po[:, i]/delta_ikj[i][:, 1:]))/(compute_gammainc(bs_po[:, i], br_po[:, i]/delta_ikj[i][:, 1:]))
+                 * (bs_po[:, i] / br_po[:, i]))
+        D_i_kj[~valid_mask_ikj[i][:, 1:].astype(bool)] = 1e-20
         ar_po[:, i] = ar_pr[:, i] + D_i_kj.sum(axis=0)
     return as_po, ar_po
+
+
+def compute_gammainc(temp, delta_1):
+    lent = len(temp)
+    r = np.shape(delta_1)
+    out = np.ndarray(r)
+    for i in range(lent):
+        for k in range(r[0]):
+            out[k][i] = (sc.gammainc(temp[i], delta_1[k, i]))
+    return out
 
 
 # @numba.jit(nopython=True)
@@ -28,14 +41,17 @@ def _update_beta(bs_pr, br_pr, zp_po, as_po, ar_po, last_t, delta_ikj, valid_mas
     dim = as_po.shape[1]
     for i in range(dim):
         bs_po[:, i] = bs_pr[:, i] + np.sum(zp_po[i][:, 1:], axis=0)
-        Dzp_i_kj = (valid_mask_ikj[i][:, 1:]
-                    * zp_po[i][:, 1:]
-                    * delta_ikj[i][:, 1:])
-        Dzp_i_kj[~valid_mask_ikj[i][:, 1:].astype(bool)] = 1e-20
-        br_po[:, i] = (br_pr[:, i] + Dzp_i_kj.sum(axis=0)
-                       + (as_po[1:, i] / ar_po[1:, i]
-                          * np.sum(dt_ikj[i][:, np.newaxis]
-                          * valid_mask_ikj[i][:, 1:], axis=0)))
+        #Dzp_i_kj = (valid_mask_ikj[i][:, 1:]
+        #            * zp_po[i][:, 1:]
+        #            * delta_ikj[i][:, 1:])
+        #Dzp_i_kj[~valid_mask_ikj[i][:, 1:].astype(bool)] = 1e-20
+        #br_po[:, i] = (br_pr[:, i] + Dzp_i_kj.sum(axis=0)
+        #               + (as_po[1:, i] / ar_po[1:, i]
+        #                  * np.sum(dt_ikj[i][:, np.newaxis]
+        #                  * valid_mask_ikj[i][:, 1:], axis=0)))
+
+        br_po[:, i] = (br_pr[:, i] + (as_po[1:, i] / ar_po[1:, i]
+                                      * np.sum(dt_ikj[i][:, np.newaxis] * valid_mask_ikj[i][:, 1:], axis=0)))
     return bs_po, br_po
 
 
@@ -45,13 +61,20 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
     for i in range(dim):
         # Expected value
         epi = np.zeros_like(delta_ikj[i])
-        epi += (digamma(as_po[np.newaxis, :, i])
+        epi += (sc.digamma(as_po[np.newaxis, :, i])
                 - np.log(ar_po[np.newaxis, :, i]))
-        epi[:, 1:] -= (np.log(br_po[:, i]) - digamma(bs_po[:, i])
-                       + (valid_mask_ikj[i][:, 1:]
-                          * (delta_ikj[i][:, 1:] + 1)
-                          * bs_po[:, i] / br_po[:, i])
-                       - np.log(dt_ikj[i][:, np.newaxis] + 1e-10))
+        #epi[:, 1:] -= (np.log(br_po[:, i]) - digamma(bs_po[:, i])
+        #               + (valid_mask_ikj[i][:, 1:]
+        #                  * (delta_ikj[i][:, 1:] + 1)
+        #                  * bs_po[:, i] / br_po[:, i])
+        #              - np.log(dt_ikj[i][:, np.newaxis] + 1e-10))
+        temp_0 = bs_po[:, i]
+        temp_0 += 1e-5
+        epi[:, 1:] -= (np.log(br_po[:, i]) - sc.digamma(bs_po[:, i])
+                       - (valid_mask_ikj[i][:, 1:]*1e5
+                          *(sc.gammainc(temp_0, br_po[:, i]/delta_ikj[i][:, 1:]) - sc.gammainc(bs_po[:, i], br_po[:, i]/delta_ikj[i][:, 1:]))
+                          /(sc.gammainc(bs_po[:, i], br_po[:, i]/delta_ikj[i][:, 1:]))
+                          ))
         # Softmax
         epi = epi - epi.max(axis=1)[:, np.newaxis]
         epi = np.exp(epi)

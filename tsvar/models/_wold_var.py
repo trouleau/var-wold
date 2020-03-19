@@ -30,14 +30,15 @@ def _update_beta(bs_pr, br_pr, zp_po, as_po, ar_po, last_t, delta_ikj, valid_mas
     br_po = np.zeros_like(br_pr)  # Alpha posterior rate, to return
     dim = as_po.shape[1]
     for i in range(dim):
+        # update shape
         bs_po[:, i] = bs_pr[:, i] + np.sum(zp_po[i][:, 1:], axis=0)
-
+        # update rate
         br_po[:, i] = (br_pr[:, i] + (as_po[1:, i] / ar_po[1:, i]
                                       * np.sum(dt_ikj[i][:, np.newaxis] * valid_mask_ikj[i][:, 1:], axis=0)))
     return bs_po, br_po
 
 
-def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
+def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj, eps):
     dim = as_po.shape[1]
     zp = list()
     for i in range(dim):
@@ -45,12 +46,12 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
         epi = np.zeros_like(delta_ikj[i])
         epi += (sc.digamma(as_po[np.newaxis, :, i])
                 - np.log(ar_po[np.newaxis, :, i]))
-
+        # a, x from p(a, x) in notes
         a = bs_po[:, i]
         x = br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)
         epi[:, 1:] -= (np.log(br_po[:, i]) - sc.digamma(bs_po[:, i])
                        - (valid_mask_ikj[i][:, 1:]
-                          * (sc.gammainc(a + 1e-5, x) / (sc.gammainc(a, x) + 1e-20) - 1) * 1e5 ))
+                          * (sc.gammainc(a + eps, x) / (sc.gammainc(a, x) + 1e-20) - 1) / eps))
         # Softmax
         epi = epi - epi.max(axis=1)[:, np.newaxis]
         epi = np.exp(epi)

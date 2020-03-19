@@ -3,7 +3,7 @@ from scipy.special import digamma
 import numba
 
 from . import WoldModel
-from ..utils.decorators import enforce_fitted
+from ..utils.decorators import enforce_observed
 
 
 # @numba.jit(nopython=True)
@@ -62,31 +62,30 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
 
 class WoldModelVariational(WoldModel):
 
-    def set_data(self, events, end_time=None):
-        super().set_data(events, end_time)
+    def observe(self, events, end_time=None):
+        super().observe(events, end_time)
         self.dt_ikj = list()
-        # TODO: fix this once virtual events in fixed in parent class
         for i in range(self.dim):
+            # TODO: fix this once virtual events in fixed in parent class
             self.events[i] = self.events[i][:-1].numpy()
             self.n_jumps[i] -= 1
-
+            # TODO: fix this once virtual events in fixed in parent class
             self.valid_mask_ikj[i] = np.hstack((
                 np.ones((self.n_jumps[i], 1)),  # set to 1 for j=0
                 self.valid_mask_ikj[i][:-1, :].numpy()))
-
+            # TODO: fix this once virtual events in fixed in parent class
             self.delta_ikj[i] = np.hstack((
                 np.zeros((self.n_jumps[i], 1)),  # set \delta_0^ik = 0
                 self.delta_ikj[i][:-1, :].numpy()))
-
+            # Cache Inter-arrival time
             dt_i = np.hstack((self.events[i][0], np.diff(self.events[i])))
             self.dt_ikj.append(dt_i)
-
+        # Cache last arrival time
         self.last_t = [self.events[i][-1] for i in range(self.dim)]
-
         # Sanity check
         assert np.allclose(self.n_jumps, np.array(list(map(len, self.events))))
 
-    @enforce_fitted
+    @enforce_observed
     def fit(self, *, as_pr, ar_pr, bs_pr, br_pr, zc_pr, max_iter=100, tol=1e-5):
         self._as_pr = as_pr  # Alpha prior, shape of Gamma distribution
         self._ar_pr = ar_pr  # Alpha prior, rate of Gamma distribution

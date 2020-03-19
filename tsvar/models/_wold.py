@@ -4,7 +4,8 @@ import warnings
 import numpy as np
 
 from . import Model
-from ..utils.decorators import enforce_fitted
+from ..fitter import FitterSGD
+from ..utils.decorators import enforce_observed
 
 
 warnings.filterwarnings(action='ignore', module='numba',
@@ -51,7 +52,7 @@ def _wold_model_init_cache(events):
     return delta_ikj, valid_mask_ikj
 
 
-class WoldModel(Model):
+class WoldModel(Model, FitterSGD):
     """Class for the Multivariate Wold Point Process Model
 
     Note: When setting the data with `set_data`, an artificial event at the end
@@ -70,11 +71,11 @@ class WoldModel(Model):
     used to computed the intensity function for dimension $i$ at time $t_k^i$.
     """
 
-    def set_data(self, events, end_time=None):
+    def observe(self, events, end_time=None):
         """Set the data for the model as well as various attributes, and cache
         computations of inter-arrival time for future log-likelihood calls.
         """
-        super().set_data(events, end_time)
+        super().observe(events, end_time)
         #
         # TODO: Observed events, add a virtual event at `end_time` for easier
         # log-likelihood computation. Remove the virtual event, it's nasty and
@@ -92,14 +93,16 @@ class WoldModel(Model):
 
     def _init_cache(self):
         events_ = [ev.numpy() for ev in self.events]
+        # Compute cache with numba
         self.delta_ikj, self.valid_mask_ikj = _wold_model_init_cache(events_)
+        # Cast numpy output to torch
         self.delta_ikj = [torch.tensor(
             self.delta_ikj[i], dtype=torch.float) for i in range(self.dim)]
         self.valid_mask_ikj = [torch.tensor(
             self.valid_mask_ikj[i], dtype=torch.float) for i in range(self.dim)]
-        self._fitted = True
+        self._observed = True
 
-    @enforce_fitted
+    @enforce_observed
     def log_likelihood(self, coeffs):
         """Log likelihood of Hawkes Process for the given parameters.
         The parameters `coeffs` of the model are parameterized as a
@@ -135,3 +138,11 @@ class WoldModel(Model):
             log_like -= torch.sum(
                 lam_ik_arr[1:] * (self.events[i][1:] - self.events[i][:-1]))
         return log_like
+
+    @enforce_observed
+    def mle_objective(self, coeffs):
+        """Objectvie function for MLE: Averaged negative log-likelihood"""
+        return -1.0 * self.log_likelihood(coeffs) / sum(self.n_jumps)
+
+    def fit(self, *args, **kwargs):
+        super().fit(objective_func=self.mle_objective, *args, **kwargs)

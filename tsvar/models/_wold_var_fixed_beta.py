@@ -4,7 +4,7 @@ import numpy as np
 from scipy.special import digamma
 
 from . import WoldModel
-from ..utils.decorators import enforce_fitted
+from ..utils.decorators import enforce_observed
 
 
 @numba.jit(nopython=True)
@@ -34,8 +34,8 @@ def _update_z(as_po, ar_po, D_ikj):
 
 class WoldModelVariationalFixedBeta(WoldModel):
 
-    def set_data(self, events, end_time=None):
-        super().set_data(events, end_time)
+    def observe(self, events, end_time=None):
+        super().observe(events, end_time)
         # TODO: fix this once virtual events in fixed in parent class
         self.D_ikj = [np.zeros_like(arr) for arr in self.delta_ikj]
         for i in range(self.dim):
@@ -57,7 +57,7 @@ class WoldModelVariationalFixedBeta(WoldModel):
         # Number of events per dimension
         self.n_jumps = np.array(list(map(len, self.events)))
 
-    @enforce_fitted
+    @enforce_observed
     def fit(self, *, as_pr, ar_pr, zc_pr, max_iter=100, tol=1e-5):
         self._as_pr = as_pr  # Alpha prior, shape of Gamma distribution
         self._ar_pr = ar_pr  # Alpha prior, rate of Gamma distribution

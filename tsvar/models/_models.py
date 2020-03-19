@@ -4,6 +4,7 @@ import numpy as np
 import torch
 
 from ..utils import softmax
+from ..utils.decorators import enforce_observed
 from ..posteriors import Posterior
 from ..priors import Prior
 
@@ -17,13 +18,13 @@ class Model(metaclass=abc.ABCMeta):
         self.verbose = verbose  # Indicate verbosity behavior
         # Device to use for torch ('cpu' or 'cuda')
         self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
-        # Data-related attributes set with data in `set_data`
+        # Data-related attributes set with data in `observe`
         self.n_jumps = None     # Total Number of jumps observed
         self.dim = None         # Number of dimensions
         self.n_params = None    # Number of parameters
         self._fitted = False    # Indicate if data is properly set
 
-    def set_data(self, events, end_time=None):
+    def observe(self, events, end_time=None):
         """
         Set the data for the model as well as various attributes.
         Child class must set attribute `n_params`
@@ -41,6 +42,7 @@ class Model(metaclass=abc.ABCMeta):
         # self.n_params  # set in child class
 
     @abc.abstractmethod
+    @enforce_observed
     def log_likelihood(self, coeffs):
         """Evaluate the log likelihood of the model for the given parameters"""
 
@@ -83,13 +85,13 @@ class ModelBlackBoxVariational(Model):
         self.n_samples = n_samples      # Number of samples for BBVI
         self.n_weights = n_weights      # Number of weights for Weighted-BBVI
         self.weight_temp = weight_temp  # Weight temperatur for Weighted-BBVI
-        # Data-related attributes set with data in `set_data`
+        # Data-related attributes set with data in `observe`
         self.n_var_params = None  # Number of parameters of the posterior
         self.alpha = None         # loc/shape of the posterior
         self.beta = None          # rate/scale of the posterior
 
-    def set_data(self, events, end_time):
-        super().set_data(events=events, end_time=end_time)
+    def observe(self, events, end_time):
+        super().observe(events=events, end_time=end_time)
         self.n_var_params = 2 * self.n_params  # must be set in child class
 
     def _log_importance_weight(self, eps, alpha, beta):
@@ -120,6 +122,7 @@ class ModelBlackBoxVariational(Model):
         value_i = w_tilde * log_w_arr
         return value_i.sum()
 
+    @enforce_observed
     def objective(self, x, seed=None):
         """
         Importance weighted variational objective function
@@ -147,6 +150,7 @@ class ModelBlackBoxVariational(Model):
         value /= self.n_samples
         return value
 
+    @enforce_observed
     def hyper_parameter_learn(self, x, momentum=0.5):
         """
         Learn the hyper parameters of the model
@@ -183,6 +187,7 @@ class ModelBlackBoxVariational(Model):
         j = np.random.multinomial(n=1, pvals=softmax(log_w_arr).detach().numpy()).argmax()
         return self.posterior.g(eps_arr_l[j], alpha, beta).detach().numpy()
 
+    @enforce_observed
     def expected_importance_weighted_estimate(self, alpha, beta, n_samples=None, seed=None):
         """
         Return the mean of the expected importance weighted distribution at the

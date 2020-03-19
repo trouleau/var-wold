@@ -11,27 +11,19 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ikj, delta_ikj, valid_ma
     dim = as_pr.shape[1]
     as_po = np.zeros_like(as_pr)  # Alpha posterior shape, to return
     ar_po = np.zeros_like(as_pr)  # Alpha posterior rate, to return
-
     for i in range(dim):
+        # update shape
         as_po[:, i] = as_pr[:, i] + zp_po[i].sum(axis=0)
-        temp_1 = bs_po[:, i]
-        temp_1 += 1
+        # update rate
         D_i_kj = (valid_mask_ikj[i][:, 1:] * dt_ikj[i][:, np.newaxis] *
-                  (compute_gammainc(temp_1, br_po[:, i]/delta_ikj[i][:, 1:]))/(compute_gammainc(bs_po[:, i], br_po[:, i]/delta_ikj[i][:, 1:]))
-                 * (bs_po[:, i] / br_po[:, i]))
-        D_i_kj[~valid_mask_ikj[i][:, 1:].astype(bool)] = 1e-20
-        ar_po[:, i] = ar_pr[:, i] + D_i_kj.sum(axis=0)
+                  ((bs_po[:, i] / br_po[:, i])
+                  * sc.gammainc(bs_po[:, i] + 1,
+                                br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20))
+                  / (sc.gammainc(bs_po[:, i],
+                                 br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)) + 1e-10)))
+        ar_po[0, i] = ar_pr[0, i] + dt_ikj[i].sum()
+        ar_po[1:, i] = ar_pr[1:, i] + D_i_kj.sum(axis=0)
     return as_po, ar_po
-
-
-def compute_gammainc(temp, delta_1):
-    lent = len(temp)
-    r = np.shape(delta_1)
-    out = np.ndarray(r)
-    for i in range(lent):
-        for k in range(r[0]):
-            out[k][i] = (sc.gammainc(temp[i], delta_1[k, i]))
-    return out
 
 
 # @numba.jit(nopython=True)
@@ -68,12 +60,14 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
         #                  * (delta_ikj[i][:, 1:] + 1)
         #                  * bs_po[:, i] / br_po[:, i])
         #              - np.log(dt_ikj[i][:, np.newaxis] + 1e-10))
-        temp_0 = bs_po[:, i]
-        temp_0 += 1e-5
-        epi[:, 1:] -= (np.log(br_po[:, i]) - sc.digamma(bs_po[:, i])
-                       - (valid_mask_ikj[i][:, 1:]*1e5
-                          *(sc.gammainc(temp_0, br_po[:, i]/delta_ikj[i][:, 1:]) - sc.gammainc(bs_po[:, i], br_po[:, i]/delta_ikj[i][:, 1:]))
-                          /(sc.gammainc(bs_po[:, i], br_po[:, i]/delta_ikj[i][:, 1:]))
+        a = bs_po[:, i]
+        x = br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)
+        epi[:, 1:] -= (np.log(br_po[:, i])
+                       - sc.digamma(bs_po[:, i])
+                       - (valid_mask_ikj[i][:, 1:]
+                          * 1e5
+                          * (sc.gammainc(a + 1e-5, x) - sc.gammainc(a, x))
+                          / (sc.gammainc(a, x) + 1e-20)
                           ))
         # Softmax
         epi = epi - epi.max(axis=1)[:, np.newaxis]

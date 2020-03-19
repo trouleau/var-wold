@@ -15,13 +15,11 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ikj, delta_ikj, valid_ma
         # update shape
         as_po[:, i] = as_pr[:, i] + zp_po[i].sum(axis=0)
         # update rate
+        x = br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)
         D_i_kj = (valid_mask_ikj[i][:, 1:] * dt_ikj[i][:, np.newaxis] *
                   ((bs_po[:, i] / br_po[:, i])
-                  * sc.gammainc(bs_po[:, i] + 1,
-                                br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20))
-                  / (sc.gammainc(bs_po[:, i],
-                                 br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)) + 1e-10)))
-        ar_po[0, i] = ar_pr[0, i] + dt_ikj[i].sum()
+                  * sc.gammainc(bs_po[:, i] + 1, x) / (sc.gammainc(bs_po[:, i], x) + 1e-20)))
+        ar_po[0, i] = ar_pr[0, i] + dt_ikj[i].sum(axis=0)
         ar_po[1:, i] = ar_pr[1:, i] + D_i_kj.sum(axis=0)
     return as_po, ar_po
 
@@ -33,14 +31,6 @@ def _update_beta(bs_pr, br_pr, zp_po, as_po, ar_po, last_t, delta_ikj, valid_mas
     dim = as_po.shape[1]
     for i in range(dim):
         bs_po[:, i] = bs_pr[:, i] + np.sum(zp_po[i][:, 1:], axis=0)
-        #Dzp_i_kj = (valid_mask_ikj[i][:, 1:]
-        #            * zp_po[i][:, 1:]
-        #            * delta_ikj[i][:, 1:])
-        #Dzp_i_kj[~valid_mask_ikj[i][:, 1:].astype(bool)] = 1e-20
-        #br_po[:, i] = (br_pr[:, i] + Dzp_i_kj.sum(axis=0)
-        #               + (as_po[1:, i] / ar_po[1:, i]
-        #                  * np.sum(dt_ikj[i][:, np.newaxis]
-        #                  * valid_mask_ikj[i][:, 1:], axis=0)))
 
         br_po[:, i] = (br_pr[:, i] + (as_po[1:, i] / ar_po[1:, i]
                                       * np.sum(dt_ikj[i][:, np.newaxis] * valid_mask_ikj[i][:, 1:], axis=0)))
@@ -55,20 +45,12 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj):
         epi = np.zeros_like(delta_ikj[i])
         epi += (sc.digamma(as_po[np.newaxis, :, i])
                 - np.log(ar_po[np.newaxis, :, i]))
-        #epi[:, 1:] -= (np.log(br_po[:, i]) - digamma(bs_po[:, i])
-        #               + (valid_mask_ikj[i][:, 1:]
-        #                  * (delta_ikj[i][:, 1:] + 1)
-        #                  * bs_po[:, i] / br_po[:, i])
-        #              - np.log(dt_ikj[i][:, np.newaxis] + 1e-10))
+
         a = bs_po[:, i]
         x = br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)
-        epi[:, 1:] -= (np.log(br_po[:, i])
-                       - sc.digamma(bs_po[:, i])
+        epi[:, 1:] -= (np.log(br_po[:, i]) - sc.digamma(bs_po[:, i])
                        - (valid_mask_ikj[i][:, 1:]
-                          * 1e5
-                          * (sc.gammainc(a + 1e-5, x) - sc.gammainc(a, x))
-                          / (sc.gammainc(a, x) + 1e-20)
-                          ))
+                          * (sc.gammainc(a + 1e-5, x) / (sc.gammainc(a, x) + 1e-20) - 1) * 1e5 ))
         # Softmax
         epi = epi - epi.max(axis=1)[:, np.newaxis]
         epi = np.exp(epi)

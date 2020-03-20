@@ -26,6 +26,10 @@ class Prior(metaclass=abc.ABCMeta):
     def logprior(self, z):
         """Log pdf of Prior"""
 
+    def __call__(self, z):
+        """Negative log-prior, to use for penalties"""
+        return -1.0 * self.logprior(z)
+
     @abc.abstractmethod
     def opt_hyper(self, z):
         """Optimal regularization weights for the current value of z"""

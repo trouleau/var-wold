@@ -57,13 +57,11 @@ def test_wold_model_loglikelihood():
     )
     print(f'  - Computed loglik.: {ll_computed.item():.5f}')
     print(f'  - Ground truth loglik.: {ll_true.item():.5f}')
-    assert np.isclose(ll_computed, ll_true), 'Test failed!'
+    assert np.isclose(ll_computed, ll_true), 'Test FAILED !!!'
     print('  - Test succeeded!')
 
 
-def test_wold_model_mle():
-    print('\nTesting: WoldModel MLE:')
-
+def generate_test_dataset():
     print('  - Define model parameters...')
     # Define random parameters
     dim = 2  # Dimensionality of the process
@@ -80,10 +78,18 @@ def test_wold_model_mle():
     # Simulate lots of data
     wold_sim = tsvar.simulate.GrangerBuscaSimulator(
         mu_rates=mu, Alpha_ba=alpha, Beta_b=beta)
-    events = wold_sim.simulate(end_time)
+    events = wold_sim.simulate(end_time, seed=4243)
     events = [torch.tensor(ev, dtype=torch.float) for ev in events]
     print((f"    - Simulated {sum(map(len, events)):,d} events "
            f"with end time: {end_time}"))
+    return dim, coeffs_true, events, end_time
+
+
+def test_wold_model_mle():
+    print('\nTesting: WoldModel MLE:')
+
+    dim, coeffs_true, events, end_time = generate_test_dataset()
+
     print('  - Run MLE...')
     # Define model
     model = tsvar.models.WoldModel(verbose=True)
@@ -98,20 +104,51 @@ def test_wold_model_mle():
         coeffs_start, coeffs_true, print_every=10)
 
     conv = model.fit(x0=coeffs_start, optimizer=torch.optim.Adam, lr=0.05,
-                     lr_sched=0.9999, tol=1e-5, max_iter=100000,
-                     penalty=tsvar.priors.GaussianPrior, C=10000.0,
+                     lr_sched=0.9999, tol=1e-5, max_iter=1000,
+                     penalty=tsvar.priors.GaussianPrior, C=1e10,
                      seed=None, callback=callback)
     coeffs_hat = model.coeffs.detach().numpy()
 
-    print('Converged?', conv)
+    print('\nConverged?', conv)
     max_diff = np.max(np.abs(coeffs_true - coeffs_hat))
     print(f'  - coeffs_hat:  {coeffs_hat.round(2)}')
     print(f'  - coeffs_true: {coeffs_true.round(2)}')
     print(f'  - max_diff: {max_diff:.4f}')
-    assert max_diff < 0.1, 'Test failed!'
+    assert max_diff < 0.1, 'Test FAILED !!!'
     print('  - Test succeeded! (max_diff < 0.1)')
 
 
+def test_wold_model_bbvi():
+    print('\nTesting: WoldModel BBVI:')
+
+    dim, coeffs_true, events, end_time = generate_test_dataset()
+
+    print('  - Run BBVI...')
+    posterior = tsvar.posteriors.LogNormalPosterior
+    prior = tsvar.priors.GaussianPrior
+    C = 1000.0
+
+    model = tsvar.models.WoldModelBBVI(posterior=posterior, prior=prior, C=C,
+                                       n_samples=1, n_weights=1, weight_temp=1,
+                                       verbose=False, device='cpu')
+    model.observe(events, end_time)
+
+    coeffs_start = torch.cat((
+        0.5 * torch.ones(dim, dtype=torch.float),
+        2.0 * torch.ones(dim, dtype=torch.float),
+        0.5 * torch.ones((dim, dim), dtype=torch.float).flatten()
+    ))
+
+    callback = tsvar.utils.callbacks.LearnerCallbackMLE(
+        coeffs_start, coeffs_true, print_every=10)
+
+    conv =  model.fit(x0=coeffs_start, optimizer=torch.optim.Adam, lr=0.05,
+                      lr_sched=0.9999, tol=1e-5, max_iter=100000,
+                      penalty=tsvar.priors.GaussianPrior, C=10000.0,
+                      seed=None, callback=callback)
+
+
 if __name__ == "__main__":
-    test_wold_model_loglikelihood()
+    # test_wold_model_loglikelihood()
     test_wold_model_mle()
+    # test_wold_model_bbvi()

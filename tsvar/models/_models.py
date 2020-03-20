@@ -50,10 +50,11 @@ class Model(metaclass=abc.ABCMeta):
 class ModelBlackBoxVariational(Model):
     """
     Base class for models with a log-likelihood function to be learnt via
-    black-box variational inference
+    Importance Weighted Black Box Variational Inference, based on
+        https://arxiv.org/abs/1509.00519
     """
 
-    def __init__(self, posterior, prior, n_samples, n_weights=1,
+    def __init__(self, posterior, prior, C, n_samples, n_weights=1,
                  weight_temp=1, verbose=False, device='cpu'):
         """
         Initialize the model
@@ -64,6 +65,8 @@ class ModelBlackBoxVariational(Model):
             Posterior object
         prior : Prior
             Prior object
+        C : float or torch.tensor
+            Prior weight (i.e., scale for `GaussianPrior`)
         n_samples : int
             Number of samples used fort he Monte Carlo estimate of expectations
         n_weights : int (optional, default: 1)
@@ -80,8 +83,8 @@ class ModelBlackBoxVariational(Model):
             raise ValueError("`posterior` should be a `Posterior` object")
         if not isinstance(prior, Prior):
             raise ValueError("`prior` should be a `Prior` object")
-        self.prior = prior              # Coeffs prior
-        self.posterior = posterior      # Coeffs posterior
+        self.posterior = posterior()    # Coeffs posterior
+        self.prior = prior(C=C)         # Coeffs prior
         self.n_samples = n_samples      # Number of samples for BBVI
         self.n_weights = n_weights      # Number of weights for Weighted-BBVI
         self.weight_temp = weight_temp  # Weight temperatur for Weighted-BBVI
@@ -123,7 +126,7 @@ class ModelBlackBoxVariational(Model):
         return value_i.sum()
 
     @enforce_observed
-    def objective(self, x, seed=None):
+    def bbvi_objective(self, x, seed=None):
         """
         Importance weighted variational objective function
 

@@ -19,6 +19,8 @@ class FitterSGD:
         # Gradient update
         self.optimizer.zero_grad()
         self._loss = self.objective_func(self.coeffs)
+        if self.penalty:
+            self._loss += self.penalty(self.coeffs)
         self._loss.backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -28,7 +30,7 @@ class FitterSGD:
 
     @enforce_observed
     def fit(self, *, objective_func, x0, optimizer, lr, lr_sched, tol, max_iter,
-            penalty, C, seed=None, callback=None):
+            penalty=None, C=1.0, seed=None, callback=None):
         """
         Fit the model.
 
@@ -72,6 +74,11 @@ class FitterSGD:
                 pass
         # Set alias for objective function
         self.objective_func = objective_func
+        # Set penalty term
+        if penalty:
+            self.penalty = penalty(C=C)
+        else:
+            self.penalty = None
         # Initialize estimate
         self.coeffs = x0.clone().detach().requires_grad_(True)
         # Reset optimizer & scheduler

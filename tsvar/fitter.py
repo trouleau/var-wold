@@ -7,14 +7,11 @@ from .utils.decorators import enforce_observed
 class FitterSGD:
     """Simple SGD Fitter"""
 
-    def _check_convergence(self):
+    def _check_convergence(self, tol):
         """Check convergence of `fit`"""
-        try:
-            if torch.abs(self.coeffs - self.coeffs_prev).max() < self.tol:
+        if hasattr(self, 'coeffs_prev'):
+            if torch.abs(self.coeffs - self.coeffs_prev).max() < tol:
                 return True
-        except AttributeError:
-            # First time: just init `coeffs_prev`
-            pass
         self.coeffs_prev = self.coeffs.detach().clone()
         return False
 
@@ -31,7 +28,7 @@ class FitterSGD:
 
     @enforce_observed
     def fit(self, *, objective_func, x0, optimizer, lr, lr_sched, tol, max_iter,
-            seed=None, callback=None):
+            penalty, C, seed=None, callback=None):
         """
         Fit the model.
 
@@ -51,6 +48,10 @@ class FitterSGD:
             Tolerence for convergence
         max_iter : int
             Maximum number of iterations
+        penalty : Prior
+            Penalty term
+        C : float or torch.tensor
+            Penalty weight
         seed : int
             Random seed (for both `numpy` and `torch`)
         callback : callable
@@ -84,7 +85,7 @@ class FitterSGD:
             if torch.isnan(self.coeffs).any():
                 raise ValueError('NaNs in coeffs! Stop optimization...')
             # Convergence check and callback
-            if self._check_convergence():
+            if self._check_convergence(tol):
                 if callback:  # Callback before the end
                     callback(self, end='\n')
                 return True

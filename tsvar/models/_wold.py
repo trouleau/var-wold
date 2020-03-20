@@ -53,9 +53,16 @@ def _wold_model_init_cache(events):
 
 
 class WoldModel(Model, FitterSGD):
-    """Class for the Multivariate Wold Point Process Model
+    """Class for the Multivariate Wold Point Process Model with intensity
+    function
 
-    Note: When setting the data with `set_data`, an artificial event at the end
+        $\lamda_i(t) = \alpha_0^i + \sum_{j=1}^D \frac{\alpha_j^i}{\beta_j + \delta_j^i(t)}$
+
+    where $D$ is the number of dimensions and $\delta_j^i(t)$ is the time
+    between the last event $t_k^i$ in dim. $i$ and the latest event $t_l^j$ in
+    dim. $j$ prior to $t_k^i$.
+
+    Note: When setting the data with `observe`, an artificial event at the end
     of the observation window, i.e. `end_time`, is added as last event in each
     dimension. This is a trick to make the computation of the log-likelihood
     easier. Indeed, we need to evaluate the intensity function at each events,
@@ -130,13 +137,13 @@ class WoldModel(Model, FitterSGD):
             # Compute the intensity at each event
             lam_ik_arr = mu[i] + torch.sum(
                 self.valid_mask_ikj[i] * alpha[:, i] / (
-                    beta.unsqueeze(0) + 1 + self.delta_ikj[i]), axis=1)
-            # Add the log-intensity term
+                    beta.unsqueeze(0) + self.delta_ikj[i]), axis=1)
+            # Add the log-intensity term (ignore the last 'fake' event)
             log_like += lam_ik_arr[:-1].log().sum()
             # Subtract the integral term
             log_like -= lam_ik_arr[0] * self.events[i][0]
-            log_like -= torch.sum(
-                lam_ik_arr[1:] * (self.events[i][1:] - self.events[i][:-1]))
+            log_like -= torch.sum(lam_ik_arr[1:]
+                                  * (self.events[i][1:] - self.events[i][:-1]))
         return log_like
 
     @enforce_observed

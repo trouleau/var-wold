@@ -55,7 +55,7 @@ class ModelBlackBoxVariational(Model):
     """
 
     def __init__(self, posterior, prior, C, n_samples, n_weights=1,
-                 weight_temp=1, verbose=False, device='cpu'):
+                 weight_temp=1, verbose=False, device='cpu', prior_kwargs={}):
         """
         Initialize the model
 
@@ -79,15 +79,11 @@ class ModelBlackBoxVariational(Model):
             Device for `torch` tensors
         """
         super().__init__(verbose=verbose, device=device)
-        if not isinstance(posterior, Posterior):
-            raise ValueError("`posterior` should be a `Posterior` object")
-        if not isinstance(prior, Prior):
-            raise ValueError("`prior` should be a `Prior` object")
-        self.posterior = posterior()    # Coeffs posterior
-        self.prior = prior(C=C)         # Coeffs prior
-        self.n_samples = n_samples      # Number of samples for BBVI
-        self.n_weights = n_weights      # Number of weights for Weighted-BBVI
-        self.weight_temp = weight_temp  # Weight temperatur for Weighted-BBVI
+        self.posterior = posterior()             # Coeffs posterior
+        self.prior = prior(C=C, **prior_kwargs)  # Coeffs prior
+        self.n_samples = n_samples               # Number of samples for BBVI
+        self.n_weights = n_weights               # Number of weights for Weighted-BBVI
+        self.weight_temp = weight_temp           # Weight temperatur for Weighted-BBVI
         # Data-related attributes set with data in `observe`
         self.n_var_params = None  # Number of parameters of the posterior
         self.alpha = None         # loc/shape of the posterior
@@ -151,6 +147,7 @@ class ModelBlackBoxVariational(Model):
         for l in range(self.n_samples):
             value += self._objective_l(eps_arr[l],  alpha, beta)
         value /= self.n_samples
+        value *= -1.0  # Negative ELBO (we want to minimize it)
         return value
 
     @enforce_observed
@@ -221,3 +218,50 @@ class ModelBlackBoxVariational(Model):
                 eps_arr_t[l], alpha, beta)
         value /= n_samples
         return value
+
+    def _check_convergence(self, tol):
+        """Check convergence of `fit`"""
+        if hasattr(self, 'coeffs_prev'):
+            if torch.abs(self.coeffs - self.coeffs_prev).max() < tol:
+                return True
+        self.coeffs_prev = self.coeffs.detach().clone()
+        return False
+
+    def _fit(self, x0, optimizer, lr, lr_sched, tol, max_iter,
+            mstep_interval=100, mstep_offset=0, mstep_momentum=0.5,
+            seed=None, callback=None):
+        if seed:
+            np.random.seed(seed)
+        # Initialize estimate
+        self.coeffs = x0.clone().detach().requires_grad_(True)
+        self.coeffs_prev = self.coeffs.detach().clone()
+        # Reset optimizer
+        self.optimizer = optimizer([self.coeffs], lr=lr)
+        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer,
+                                                                gamma=lr_sched)
+        for t in range(max_iter):
+            self._n_iter_done = t
+
+            # Gradient update
+            self.optimizer.zero_grad()
+            self._loss = self.bbvi_objective(self.coeffs)
+            self._loss.backward()
+            self.optimizer.step()
+            self.scheduler.step()
+
+            # Check that the optimization did not fail
+            if torch.isnan(self.coeffs).any():
+                raise ValueError('NaNs in coeffs! Stop optimization...')
+            # Convergence check
+            if self._check_convergence(tol):
+                if callback:  # Callback before the end
+                    callback(self, end='\n')
+                    print('Converged!')
+                break
+            elif callback:  # Callback at each iteration
+                callback(self)
+            # Update hyper-parameters
+            if (t+1) % mstep_interval == 0 and t > mstep_offset:
+                self.hyper_parameter_learn(self.coeffs.detach(),
+                                           momentum=mstep_momentum)
+        return self.coeffs

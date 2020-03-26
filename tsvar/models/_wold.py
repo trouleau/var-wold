@@ -52,7 +52,7 @@ def _wold_model_init_cache(events):
     return delta_ikj, valid_mask_ikj
 
 
-class WoldModel(Model, FitterSGD):
+class WoldModel(Model):
     """Class for the Multivariate Wold Point Process Model with intensity
     function
 
@@ -146,10 +146,14 @@ class WoldModel(Model, FitterSGD):
                                   * (self.events[i][1:] - self.events[i][:-1]))
         return log_like
 
+
+class WoldModelMLE(WoldModel, FitterSGD):
+    """Wold Model with Maximum Likelihoof Estimation fitter"""
+
     @enforce_observed
     def mle_objective(self, coeffs):
         """Objectvie function for MLE: Averaged negative log-likelihood"""
         return -1.0 * self.log_likelihood(coeffs) / sum(self.n_jumps)
 
     def fit(self, *args, **kwargs):
-        super().fit(objective_func=self.mle_objective, *args, **kwargs)
+        super().fit(objective_func=self.mle_objective, C=np.inf, penalty=None, *args, **kwargs)

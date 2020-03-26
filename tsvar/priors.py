@@ -79,7 +79,7 @@ class GaussianLaplacianPrior(Prior):
                                   'tensor of length `n_params`.'))
         else:
             self.n_params = len(mask_gaus)
-            self.C = self.C * torch.ones(self.n_params)
+            self.C = self.C * torch.ones(self.n_params, dtype=torch.float64)
         self.mask_gaus = mask_gaus
 
     def logprior(self, z):
@@ -89,7 +89,7 @@ class GaussianLaplacianPrior(Prior):
 
     def opt_hyper(self, z):
         """Optimal regularization weights for the current value of z"""
-        opt_C = torch.zeros_like(self.C)
+        opt_C = torch.zeros_like(self.C, dtype=torch.float64)
         opt_C[self.mask_gaus] = 2 * z[self.mask_gaus] ** 2
         opt_C[~self.mask_gaus] = z[~self.mask_gaus]
         return opt_C

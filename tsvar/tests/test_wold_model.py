@@ -184,6 +184,52 @@ def test_wold_model_bbvi(dim, coeffs_true, events, end_time):
         print('  - Test SUCESS! (max_diff < 0.1)')
 
 
+def test_wold_model_vi_fixed_beta(dim, coeffs_true, events, end_time):
+    print()
+    print('Testing: WoldModel MF-VI Fixed-Beta')
+    print('-----------------------------------')
+    # Extract all coeffs
+    baseline = coeffs_true[:dim]
+    beta = coeffs_true[dim:2*dim]
+    adjacency = coeffs_true[2*dim:]
+    coeffs_true = np.hstack((baseline, adjacency.flatten()))
+    # Set the betas correctly
+    beta_ji_plus_one = np.repeat(beta[:, np.newaxis], dim, axis=1) + 1
+    beta_ji_plus_one = np.vstack((np.zeros(dim), beta_ji_plus_one))
+    # Set model
+    model = tsvar.models.WoldModelVariationalFixedBeta(verbose=True)
+    model.observe(events, beta=beta_ji_plus_one)
+    # Set priors
+    as_pr = 1.0 * np.ones((dim + 1, dim))
+    ar_pr = 1.0 * np.ones((dim + 1, dim))
+    zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
+    coeffs_start = (as_pr / ar_pr).flatten()
+    # Set callback
+    callback = tsvar.utils.callbacks.LearnerCallbackMLE(x0=coeffs_start,
+                                                        print_every=10,
+                                                        coeffs_true=coeffs_true,
+                                                        acc_thresh=0.05,
+                                                        dim=dim)
+    # Fit model
+    conv = model.fit(as_pr=as_pr, ar_pr=ar_pr, zc_pr=zc_pr, max_iter=1000,
+                     tol=1e-5, callback=callback)
+    # Print results
+    print('\nConverged?', conv)
+    coeffs_hat_mean = model.alpha_posterior_mean().flatten()
+    coeffs_hat_mode = model.alpha_posterior_mode().flatten()
+    max_diff_mean = np.max(np.abs(coeffs_true - coeffs_hat_mean))
+    max_diff_mode = np.max(np.abs(coeffs_true - coeffs_hat_mode))
+    print(f'  - coeffs_hat_mean:  {coeffs_hat_mean.round(2)}')
+    print(f'  - coeffs_hat_mode:  {coeffs_hat_mode.round(2)}')
+    print(f'  - coeffs_true:      {coeffs_true.round(2)}')
+    print(f'  - max_diff_mean: {max_diff_mean:.4f}')
+    print(f'  - max_diff_mode: {max_diff_mode:.4f}')
+    if max_diff_mean >= 0.1 or max_diff_mode >= 0.1:
+        print('  - Test FAILED !!!')
+    else:
+        print('  - Test SUCESS! (max_diff < 0.1)')
+
+
 def test_granger_busca(dim, coeffs_true, events, end_time):
     """
 
@@ -221,12 +267,18 @@ def test_granger_busca(dim, coeffs_true, events, end_time):
 
 if __name__ == "__main__":
     # test_wold_model_loglikelihood()
-    # print('\n', '='*80, '\n', sep='')
 
+    # print('\n', '='*80, '\n', sep='')
     data = generate_test_dataset()
 
-    test_wold_model_mle(*data)
+    # print('\n', '='*80, '\n', sep='')
+    # test_wold_model_mle(*data)
+
+    # print('\n', '='*80, '\n', sep='')
+    # test_wold_model_bbvi(*data)
+
     print('\n', '='*80, '\n', sep='')
-    test_wold_model_bbvi(*data)
-    print('\n', '='*80, '\n', sep='')
-    test_granger_busca(*data)
+    test_wold_model_vi_fixed_beta(*data)
+
+    # print('\n', '='*80, '\n', sep='')
+    # test_granger_busca(*data)

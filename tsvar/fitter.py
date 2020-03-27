@@ -10,9 +10,55 @@ class Fitter(metaclass=abc.ABCMeta):
     def _check_convergence(self, tol):
         """Check convergence of `fit`"""
         if hasattr(self, 'coeffs_prev'):
-            if torch.abs(self.coeffs - self.coeffs_prev).max() < tol:
+            if np.abs(self.coeffs - self.coeffs_prev).max() < tol:
                 return True
-        self.coeffs_prev = self.coeffs.detach().clone()
+        self.coeffs_prev = self.coeffs.copy()
+        return False
+
+
+class FitterIterativeNumpy(Fitter):
+    """
+    Basic fitter for iterative algorithms (no gradient descent) using `numpy`
+    """
+
+    @enforce_observed
+    def fit(self, *, step_function, tol, max_iter, seed=None, callback=None):
+        """
+        Fit the model.
+
+        Arguments:
+        step_function : callable
+            Function to evaluate at each iteration
+        tol : float
+            Tolerence for convergence
+        max_iter : int
+            Maximum number of iterations
+        callback : callable
+            Callback function that takes as input `self`
+
+        Returns:
+        --------
+        converged : bool
+            Indicator of convergence
+        """
+        # Set random seed
+        if seed:
+            np.random.seed(seed)
+        # Set callable if None
+        if callback is None:
+            def callback(arg): pass
+        for t in range(max_iter):
+            self._n_iter_done = t
+            # Run iteration
+            step_function()
+            # Check that the optimization did not fail
+            if np.isnan(self.coeffs).any():
+                raise ValueError('NaNs in coeffs! Stop optimization...')
+            # Convergence check and callback
+            if self._check_convergence(tol):
+                callback(self, end='\n')  # Callback before the end
+                return True
+            callback(self)  # Callback at each iteration
         return False
 
 
@@ -81,8 +127,7 @@ class FitterSGD(Fitter):
             torch.manual_seed(seed)
         # Set callable if None
         if callback is None:
-            def callback(arg):
-                pass
+            def callback(arg): pass
         # Set alias for objective function
         self._objective_func = objective_func
         # Set penalty term
@@ -99,7 +144,6 @@ class FitterSGD(Fitter):
         for t in range(max_iter):
             self._n_iter_done = t
             self._take_gradient_step()
-            print(self.coeffs)
             # Check that the optimization did not fail
             if torch.isnan(self.coeffs).any():
                 raise ValueError('NaNs in coeffs! Stop optimization...')
@@ -183,8 +227,7 @@ class FitterVariationalEM(Fitter):
             torch.manual_seed(seed)
         # Set callable if None
         if callback is None:
-            def callback(arg):
-                pass
+            def callback(arg): pass
         # Set alias for objective function
         self._objective_func = objective_func
         # Set the attributes for the E and M steps

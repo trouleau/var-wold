@@ -7,7 +7,7 @@ import numba
 
 @numba.njit
 def _total_intensity(mu, adj, beta, delta, t):
-    return mu + np.sum(adj / (beta + delta), axis=0)
+    return mu + np.sum(adj / (beta + 1 + delta), axis=0)
 
 
 @numba.njit

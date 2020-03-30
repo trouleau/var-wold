@@ -27,12 +27,20 @@ source ~/.bashrc
 rm ~/miniconda.sh
 
 #################### Prepare project environment ##################################################
+
 # Make workspace dir
 mkdir /root/workspace/
+
 # Clone project source repos
 cd /root/workspace/
 git clone git@github.com:trouleau/var-wold.git  # Add personal lib
-git clone git@github.com:trouleau/granger-busca.git  # Add gb lib
+
 # Make virtualenv
 conda create -n var-wold python=3.7
-cd /root/workspace/var-wold/ && conda activate var-wold && pip install -r requirements.txt
+conda activate var-wold
+
+cd /root/workspace/var-wold/ && pip install -e .  # Install internal lib
+
+cd /root/workspace/var-wold/lib/granger-busca/ && pip install cython && pip install -e .  # Install gb
+
+cd /root/workspace/var-wold/ && pip install -r requirements.txt

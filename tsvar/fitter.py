@@ -9,10 +9,14 @@ class Fitter(metaclass=abc.ABCMeta):
 
     def _check_convergence(self, tol):
         """Check convergence of `fit`"""
+        # Keep this feature in `numpy`
+        coeffs = self.coeffs
+        if isinstance(coeffs, torch.Tensor):
+            coeffs = coeffs.detach().numpy()
         if hasattr(self, 'coeffs_prev'):
-            if np.abs(self.coeffs - self.coeffs_prev).max() < tol:
+            if np.abs(coeffs - self.coeffs_prev).max() < tol:
                 return True
-        self.coeffs_prev = self.coeffs.copy()
+        self.coeffs_prev = coeffs.copy()
         return False
 
 

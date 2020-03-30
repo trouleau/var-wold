@@ -36,8 +36,15 @@ class WoldModelVariationalFixedBeta(WoldModel, FitterIterativeNumpy):
 
     def observe(self, events, beta, end_time=None):
         super().observe(events, end_time)
+        # Fix the beta:
+        #   - here, `beta` should be greater than 1, not zero as usual.
+        #   - here, `beta` should be shape (dim+1, dim)
+        self.beta = np.vstack((np.zeros(self.dim), beta + 1))
+        assert beta.shape == (self.dim, self.dim), (
+            f"`beta` must have shape {(self.dim, self.dim)} "
+            f"but has shape {beta.shape}")
+        # Fix cache for VI
         # TODO: fix this once virtual events in fixed in parent class
-        self.beta = beta
         self.D_ikj = [np.zeros_like(arr) for arr in self.delta_ikj]
         for i in range(self.dim):
             self.events[i] = self.events[i][:-1].numpy()
@@ -50,7 +57,7 @@ class WoldModelVariationalFixedBeta(WoldModel, FitterIterativeNumpy):
             dts = np.hstack((self.events[i][0], np.diff(self.events[i])))
             self.D_ikj[i] = (valid_mask_ikj_i
                              * dts[:, np.newaxis]
-                             / (beta[np.newaxis, :, i] + delta_ikj_i + 1e-20))
+                             / (self.beta[np.newaxis, :, i] + delta_ikj_i + 1e-20))
             self.D_ikj[i][~valid_mask_ikj_i.astype(bool)] = 1e-20
         # Remove `delta_ikj` and `valid_mask_ikj`, we only need `D_ikj` to fit
         del self.delta_ikj
@@ -92,8 +99,14 @@ class WoldModelVariationalFixedBeta(WoldModel, FitterIterativeNumpy):
         self._init_fit(as_pr, ar_pr, zc_pr)
         super().fit(step_function=self._iteration, *args, **kwargs)
 
-    def alpha_posterior_mean(self):
-        return self._as_po / self._ar_po
+    def alpha_posterior_mean(self, as_po=None, ar_po=None):
+        if (as_po is None) and (ar_po is None):
+            as_po = self._as_po
+            ar_po = self._ar_po
+        return as_po / ar_po
 
-    def alpha_posterior_mode(self):
-        return (self._as_po >= 1) * (self._as_po - 1) / self._ar_po
+    def alpha_posterior_mode(self, as_po=None, ar_po=None):
+        if (as_po is None) and (ar_po is None):
+            as_po = self._as_po
+            ar_po = self._ar_po
+        return (as_po >= 1) * (as_po - 1) / ar_po

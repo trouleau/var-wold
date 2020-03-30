@@ -52,7 +52,7 @@ def _wold_model_init_cache(events):
     return delta_ikj, valid_mask_ikj
 
 
-class WoldModel(Model):
+class WoldModelBetaJ(Model):
     """Class for the Multivariate Wold Point Process Model with intensity
     function
 
@@ -147,7 +147,7 @@ class WoldModel(Model):
         return log_like
 
 
-class WoldModelBetaIJ(Model):
+class WoldModel(Model):
     """Class for the Multivariate Wold Point Process Model with intensity
     function
 
@@ -189,7 +189,9 @@ class WoldModelBetaIJ(Model):
         self.n_jumps = list(map(len, self.events))
         #
         # Number of parameters of the model
-        self.n_params = self.dim * self.dim + self.dim + self.dim
+        self.n_params = (self.dim                # shape baseline (mu)
+                         + self.dim * self.dim   # shape beta
+                         + self.dim * self.dim)  # shape adjacency (alpha)
         # Init cache if necessary
         self._init_cache()
 
@@ -254,7 +256,7 @@ class WoldModelMLE(WoldModel, FitterSGD):
         super().fit(objective_func=self.mle_objective, *args, **kwargs)
 
 
-class WoldModelBetaIJ_MLE(WoldModelBetaIJ, FitterSGD):
+class WoldModelBetaJ_MLE(WoldModelBetaJ, FitterSGD):
     """Wold Model with Maximum Likelihoof Estimation fitter"""
 
     @enforce_observed

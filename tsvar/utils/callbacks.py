@@ -42,14 +42,19 @@ class History:
 
 class LearnerCallbackMLE:
 
-    def __init__(self, x0, print_every=10, coeffs_true=None, acc_thresh=None, dim=None):
+    def __init__(self, x0, print_every=10, coeffs_true=None, acc_thresh=None,
+                 dim=None, link_func=None):
         self.print_every = print_every
+        self.n_params = len(x0)
         # If grount is provided, compute other stuff
         if coeffs_true is not None:
             self.has_ground_truth = True
             self.coeffs_true = coeffs_true.flatten()
             self.dim = dim
             self.acc_thresh = acc_thresh
+            if link_func is None:
+                def link_func(coeffs): return coeffs
+            self.link_func = link_func
         else:
             self.has_ground_truth = False
         # Init history
@@ -61,40 +66,48 @@ class LearnerCallbackMLE:
 
     def __call__(self, learner_obj, end=""):
         t = learner_obj._n_iter_done + 1
-
+        # Convert to numpy
         if isinstance(learner_obj.coeffs, torch.Tensor):
             coeffs = learner_obj.coeffs.detach().clone().numpy()
         else:
             coeffs = learner_obj.coeffs.copy()
-
+        # Apply link function
+        coeffs = self.link_func(coeffs)
+        # Sanity check
+        assert len(coeffs) == self.n_params, "Inconsistent number of parameters provided"
+        # Set loss
+        loss = np.nan
         if hasattr(learner_obj, '_loss'):
             loss = float(learner_obj._loss.detach())
-        else:
-            loss = np.nan
-
+        # Set call time
         call_time = time.time()
-
+        # Print & record
         if t % self.print_every == 0:
-
             self.history.append(coeffs=coeffs.tolist(), loss=loss,
                                 iter=t, time=call_time)
-
+            # Compute difference in vars since last call
             x_diff = np.abs(self.last_coeffs - coeffs).max()
             time_diff = (call_time - self.last_time) / self.print_every
-            loss_diff = (loss - self.last_loss)
-
-            message = (f"\riter: {t:>5d} | dx: {x_diff:+.4e} | loss: {loss:.4e}"
-                       f" | dloss: {loss_diff:+.2e}"
-                       f" | time-per-iter: {time_diff:.2e}")
-
+            # Write message
+            # base
+            message = f"\riter: {t:>5d} | dx: {x_diff:+.4e}"
+            # loss widget
+            if hasattr(learner_obj, '_loss'):
+                loss_diff = (loss - self.last_loss)
+                message += f" | loss: {loss:.4e} | dloss: {loss_diff:+.2e}"
+            # ground truth widget
             if self.has_ground_truth:
                 acc = metrics.accuracy(adj_test=coeffs[-self.dim**2:],
                                        adj_true=self.coeffs_true[-self.dim**2:],
                                        threshold=self.acc_thresh)
-                message += f" | acc: {acc:.2f}"
-
+                relerr = metrics.relerr(adj_test=coeffs[-self.dim**2:],
+                                        adj_true=self.coeffs_true[-self.dim**2:])
+                message += f" | acc: {acc:.2f} | relerr: {relerr:.2f}"
+            # runtime widget
+            message += f" | time-per-it: {time_diff:.2e}"
+            # print message
             print(message + " "*5, end=end, flush=True)
-
+        # Update last vars
         self.last_coeffs = coeffs
         self.last_time = time.time()
         self.last_loss = loss

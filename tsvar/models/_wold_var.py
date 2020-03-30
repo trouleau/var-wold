@@ -4,6 +4,7 @@ import numba
 
 from . import WoldModel
 from ..utils.decorators import enforce_observed
+from ..fitter import FitterIterativeNumpy
 
 
 # @numba.jit(nopython=True)
@@ -24,7 +25,7 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ikj, delta_ikj, valid_ma
     return as_po, ar_po
 
 
-# @numba.jit(nopython=True)
+#@numba.jit(nopython=True)
 def _update_beta(bs_pr, br_pr, zp_po, as_po, ar_po, last_t, delta_ikj, valid_mask_ikj, dt_ikj):
     bs_po = np.zeros_like(bs_pr)  # Alpha posterior shape, to return
     br_po = np.zeros_like(br_pr)  # Alpha posterior rate, to return
@@ -60,7 +61,7 @@ def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, dt_ikj, eps
     return zp
 
 
-class WoldModelVariational(WoldModel):
+class WoldModelVariational(WoldModel, FitterIterativeNumpy):
 
     def observe(self, events, end_time=None):
         super().observe(events, end_time)
@@ -85,71 +86,72 @@ class WoldModelVariational(WoldModel):
         # Sanity check
         assert np.allclose(self.n_jumps, np.array(list(map(len, self.events))))
 
-    @enforce_observed
-    def fit(self, *, as_pr, ar_pr, bs_pr, br_pr, zc_pr, max_iter=100, tol=1e-5):
+    def _init_fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr):
         self._as_pr = as_pr  # Alpha prior, shape of Gamma distribution
         self._ar_pr = ar_pr  # Alpha prior, rate of Gamma distribution
         self._bs_pr = bs_pr  # Beta prior, shape of Gamma distribution
         self._br_pr = br_pr  # Beta prior, rate of Gamma distribution
         self._zc_pr = zc_pr  # Z prior, concentration
-
         # shape: (dim+1: j, dim: i)
         self._as_po = self._as_pr.copy()  # Alpha posterior, shape of Gamma distribution
         self._ar_po = self._ar_pr.copy()  # Alpha posterior, rate of Gamma distribution
-
         # shape: (dim: j, dim: i)
         self._bs_po = self._bs_pr.copy()  # Beta posterior, shape of InvGamma distribution
         self._br_po = self._br_pr.copy()  # Beta posterior, rate of InvGamma distribution
-
         # shape: (dim: i, #events_i: k, dim: j)
         self._zp_po = list()  # Z posterior, probabilities of Categorical distribution
         for i in range(self.dim):
             self._zp_po.append(self._zc_pr[i]
                                / self._zc_pr[i].sum(axis=1)[:, np.newaxis])
 
-        print('-'*50, 0)
-        print('Alpha posterior mean:')
-        print(np.round(self._as_po / self._ar_po, 2))
-        print('Z[0] posterior probabilities')
-        print(self._zp_po[0])
+    def _iteration(self):
+        # Update alpha
+        self._as_po, self._ar_po = _update_alpha(as_pr=self._as_pr,
+                                                 ar_pr=self._ar_pr,
+                                                 zp_po=self._zp_po,
+                                                 bs_po=self._bs_po,
+                                                 br_po=self._br_po,
+                                                 dt_ikj=self.dt_ikj,
+                                                 delta_ikj=self.delta_ikj,
+                                                 valid_mask_ikj=self.valid_mask_ikj)
+        # Update beta (i.e. X)
+        self._bs_po, self._br_po = _update_beta(bs_pr=self._bs_pr,
+                                                br_pr=self._br_pr,
+                                                zp_po=self._zp_po,
+                                                as_po=self._as_po,
+                                                ar_po=self._ar_po,
+                                                last_t=self.last_t,
+                                                delta_ikj=self.delta_ikj,
+                                                valid_mask_ikj=self.valid_mask_ikj,
+                                                dt_ikj=self.dt_ikj)
+        # Sanity check
+        if (self._as_po.min() < 0) or (self._as_po.min() < 0):
+            raise RuntimeError("Negative posterior parameter!")
+        # Update Z
+        self._zp_po = _update_z(as_po=self._as_po,
+                                ar_po=self._ar_po,
+                                bs_po=self._bs_po,
+                                br_po=self._br_po,
+                                delta_ikj=self.delta_ikj,
+                                valid_mask_ikj=self.valid_mask_ikj,
+                                dt_ikj=self.dt_ikj,
+                                eps=1e-8)
+        # Set coeffs attribute for Fitter to assess convergence
+        self.coeffs = (self._as_po / self._ar_po).flatten()
 
-        for i in range(max_iter):
-            print('-'*50, i+1)
+    @enforce_observed
+    def fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr, *args, **kwargs):
+        self._init_fit(as_pr, ar_pr, bs_pr, br_pr, zc_pr)
+        super().fit(step_function=self._iteration, *args, **kwargs)
 
-            self._as_po, self._ar_po = _update_alpha(as_pr=self._as_pr,
-                                                     ar_pr=self._ar_pr,
-                                                     zp_po=self._zp_po,
-                                                     bs_po=self._bs_po,
-                                                     br_po=self._br_po,
-                                                     dt_ikj=self.dt_ikj,
-                                                     delta_ikj=self.delta_ikj,
-                                                     valid_mask_ikj=self.valid_mask_ikj)
+    def alpha_posterior_mean(self, as_po=None, ar_po=None):
+        if (as_po is None) and (ar_po is None):
+            as_po = self._as_po
+            ar_po = self._ar_po
+        return as_po / ar_po
 
-            self._bs_po, self._br_po = _update_beta(bs_pr=self._bs_pr,
-                                                    br_pr=self._br_pr,
-                                                    zp_po=self._zp_po,
-                                                    as_po=self._as_po,
-                                                    ar_po=self._ar_po,
-                                                    last_t=self.last_t,
-                                                    delta_ikj=self.delta_ikj,
-                                                    valid_mask_ikj=self.valid_mask_ikj,
-                                                    dt_ikj=self.dt_ikj)
-
-            print('Alpha posterior mean:')
-            print(np.round(self._as_po / self._ar_po, 2))
-
-            if self._as_po.min() < 0:
-                raise RuntimeError("Negative alpha shape!")
-            if self._as_po.min() < 0:
-                raise RuntimeError("Negative alpha rate!")
-
-            self._zp_po = _update_z(as_po=self._as_po,
-                                    ar_po=self._ar_po,
-                                    bs_po=self._bs_po,
-                                    br_po=self._br_po,
-                                    delta_ikj=self.delta_ikj,
-                                    valid_mask_ikj=self.valid_mask_ikj,
-                                    dt_ikj=self.dt_ikj)
-
-            print('Z posterior probabilities')
-            print(self._zp_po[0])
+    def alpha_posterior_mode(self, as_po=None, ar_po=None):
+        if (as_po is None) and (ar_po is None):
+            as_po = self._as_po
+            ar_po = self._ar_po
+        return (as_po >= 1) * (as_po - 1) / ar_po

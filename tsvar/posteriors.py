@@ -29,16 +29,16 @@ class Posterior:
 
 class LogNormalPosterior(Posterior):
 
-    def __init__(self, device = 'cpu'):
+    def __init__(self, device='cpu'):
         self.norm = torch.distributions.Normal(loc=0.0, scale=1.0)
-        self.device = 'cuda' if torch.cuda.is_available() and device=='cuda' else 'cpu'
+        self.device = 'cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu'
 
     def sample_epsilon(self, size):
         """
         Sample an array of epsilons from the normal distribution, with size
         (n_samples, n_weights, n_params)
         """
-        eps_err = torch.randn(size, dtype=torch.float64, device = self.device, requires_grad=False)
+        eps_err = torch.randn(size, dtype=torch.float64, device=self.device, requires_grad=False)
         return eps_err
 
     def g(self, eps, alpha, beta):

@@ -33,7 +33,7 @@ def to_csr(sparse_dict, n_proc, dtype='d'):
 class GrangerBusca(object):
 
     def __init__(self, alpha_prior, num_iter, metropolis=True, sloppy=1,
-                 beta_strategy=1, num_jobs=None):
+                 beta_strategy=1, num_jobs=1):
 
         if isinstance(beta_strategy, str):
             if beta_strategy != 'busca':

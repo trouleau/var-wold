@@ -81,3 +81,11 @@ class MultivariateWoldSimulator(object):
         self.t = new_time
         self.n_jumps = new_jumps
         return list(map(np.array, self.events))
+
+    @property
+    def end_time(self):
+        return self.t
+
+    def spectral_radius(self):
+        eigs = np.linalg.eigvals(self.alpha_ba / (self.beta_ba + 1))
+        return eigs.max() - eigs.min()

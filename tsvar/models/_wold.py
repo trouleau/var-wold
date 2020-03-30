@@ -253,7 +253,7 @@ class WoldModelMLE(WoldModel, FitterSGD):
         return -1.0 * self.log_likelihood(coeffs) / sum(self.n_jumps)
 
     def fit(self, *args, **kwargs):
-        super().fit(objective_func=self.mle_objective, *args, **kwargs)
+        return super().fit(objective_func=self.mle_objective, *args, **kwargs)
 
 
 class WoldModelBetaJ_MLE(WoldModelBetaJ, FitterSGD):
@@ -265,4 +265,4 @@ class WoldModelBetaJ_MLE(WoldModelBetaJ, FitterSGD):
         return -1.0 * self.log_likelihood(coeffs) / sum(self.n_jumps)
 
     def fit(self, *args, **kwargs):
-        super().fit(objective_func=self.mle_objective, *args, **kwargs)
+        return super().fit(objective_func=self.mle_objective, *args, **kwargs)

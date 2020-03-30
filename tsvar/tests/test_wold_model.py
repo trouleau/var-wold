@@ -106,9 +106,9 @@ def generate_test_dataset():
     # Simulate lots of data
     wold_sim = tsvar.simulate.MultivariateWoldSimulator(
         mu_a=mu, alpha_ba=alpha, beta_ba=beta)
-    events = wold_sim.simulate(max_jumps=100, seed=4243)
+    events = wold_sim.simulate(max_jumps=int(80e4), seed=4243)
     events = [torch.tensor(ev, dtype=torch.float) for ev in events]
-    end_time = wold_sim.t
+    end_time = wold_sim.end_time
     print((f"    - Simulated {sum(map(len, events)):,d} events "
            f"with end time: {end_time}"))
     print("    - Events:")
@@ -352,8 +352,7 @@ if __name__ == "__main__":
 
     print('\n', '='*80, '\n', sep='')
     test_wold_model_loglikelihood()
-
-    print('\n', '='*80, '\n', sep='')
+    print('\n', '-'*50, '\n', sep='')
     test_wold_model_mle(*data)
 
     print('\n', '='*80, '\n', sep='')

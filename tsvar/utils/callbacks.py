@@ -43,8 +43,9 @@ class History:
 class LearnerCallbackMLE:
 
     def __init__(self, x0, print_every=10, coeffs_true=None, acc_thresh=None,
-                 dim=None, link_func=None):
+                 dim=None, link_func=None, default_end=""):
         self.print_every = print_every
+        self.default_end = default_end
         self.n_params = len(x0)
         # If grount is provided, compute other stuff
         if coeffs_true is not None:
@@ -61,10 +62,11 @@ class LearnerCallbackMLE:
         self.history = History(field_names=('coeffs', 'loss', 'iter', 'time'))
         # Init previous variables for differential computation
         self.last_time = time.time()
+        self.last_iter = 0
         self.last_coeffs = x0.numpy() if isinstance(x0, torch.Tensor) else x0
         self.last_loss = float("Inf")
 
-    def __call__(self, learner_obj, end=""):
+    def __call__(self, learner_obj, end=None, force=False):
         t = learner_obj._n_iter_done + 1
         # Convert to numpy
         if isinstance(learner_obj.coeffs, torch.Tensor):
@@ -79,15 +81,16 @@ class LearnerCallbackMLE:
         loss = np.nan
         if hasattr(learner_obj, '_loss'):
             loss = float(learner_obj._loss.detach())
-        # Set call time
-        call_time = time.time()
         # Print & record
-        if t % self.print_every == 0:
-            self.history.append(coeffs=coeffs.tolist(), loss=loss,
-                                iter=t, time=call_time)
+        if (t % self.print_every == 0) or force:
+            # Set call time
+            call_time = time.time()
             # Compute difference in vars since last call
             x_diff = np.abs(self.last_coeffs - coeffs).max()
-            time_diff = (call_time - self.last_time) / self.print_every
+            time_diff = (call_time - self.last_time) / (t - self.last_iter)
+            # Add to history
+            self.history.append(coeffs=coeffs.tolist(), loss=loss,
+                                iter=t, time=time_diff)
             # Write message
             # base
             message = f"\riter: {t:>5d} | dx: {x_diff:+.4e}"
@@ -104,12 +107,14 @@ class LearnerCallbackMLE:
                                         adj_true=self.coeffs_true[-self.dim**2:])
                 message += f" | acc: {acc:.2f} | relerr: {relerr:.2f}"
             # runtime widget
-            message += f" | time-per-it: {time_diff:.2e}"
+            message += f" | time/it: {time_diff:.2e}"
             # print message
-            print(message + " "*5, end=end, flush=True)
+            print(message + " "*5, end=end or self.default_end, flush=True)
+            # Update last vars
+            self.last_time = time.time()
+            self.last_iter = t
         # Update last vars
         self.last_coeffs = coeffs
-        self.last_time = time.time()
         self.last_loss = loss
 
     def to_dict(self):

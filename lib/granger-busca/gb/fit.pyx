@@ -93,11 +93,11 @@ def fit(Timestamps all_stamps, SloppyCounter sloppy, double alpha_prior,
     cdef PoissonKernel poisson = PoissonKernel(all_stamps, n_proc, rng)
     cdef AbstractKernel kernel = WoldKernel(poisson, beta)
 
-    printf("Worker %lu starting\n", worker_id)
+    // printf("Worker %lu starting\n", worker_id)
     with nogil:
         do_work(all_stamps, sloppy, sampler, kernel, n_iter, worker_id,
                 workload)
-    printf("Worker %lu done\n", worker_id)
+    // printf("Worker %lu done\n", worker_id)
 
     cdef dict Alpha = {}
     cdef dict curr_state = {}

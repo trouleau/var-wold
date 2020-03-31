@@ -308,13 +308,14 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
         num_iter=GB_N_ITER,
         metropolis=True,
         beta_strategy='busca',
-    )  # recommended parameters
+        num_jobs=1,
+    )
     start_time = time.time()
     granger_model.fit(events)
     run_time = time.time() - start_time
     # Extract infered adjacency
     adj_hat = granger_model.Alpha_.toarray()
-    adj_hat = adj_hat / adj_hat.sum(axis=0)
+    adj_hat = adj_hat / adj_hat.sum(axis=1)
     beta_hat = np.ones((dim, dim)) * (granger_model.beta_ + 1)
     coeffs_hat = np.hstack((granger_model.mu_, beta_hat.flatten(),
                             adj_hat.flatten()))
@@ -330,8 +331,8 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
     res_dict = {}
     res_dict['coeffs'] = {
         'baseline': granger_model.mu_.tolist(),
-        'beta': beta_hat.tolist(),
-        'adjacency': adj_hat.tolist()
+        'beta': granger_model.beta_.tolist(),
+        'adjacency': granger_model.Alpha_.toarray().tolist()
     }
     res_dict['conv'] = True
     res_dict['history'] = {'time': [run_time]}

@@ -90,6 +90,9 @@ if __name__ == "__main__":
                         help="Size of the parallel pool")
     parser.add_argument('-s', '--n_sims', dest='n_sims', type=int,
                         required=True, help="Number of simulatins per sub-exp")
+    parser.add_argument('--no-std-redirect', dest='no_std_redirect',
+                        action="store_true", help="Do not redirect stdout/stderr")
+
     args = parser.parse_args()
 
     # Pattern to extract list of parameter files
@@ -107,8 +110,12 @@ if __name__ == "__main__":
             # Build output filename
             out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}.json')
             # Build stdout/stderr filenames
-            stdout = os.path.join(sub_exp_dir, f'stdout-{sim_idx:02d}')
-            stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}')
+            if args.no_std_redirect:
+                stdout = None
+                stderr = None
+            else:
+                stdout = os.path.join(sub_exp_dir, f'stdout-{sim_idx:02d}')
+                stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}')
             # Add tuple of arguments to list
             pool_args.append(
                 (param_fname, out_fname, sim_idx, stdout, stderr))

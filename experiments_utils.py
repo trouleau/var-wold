@@ -12,11 +12,14 @@ np.seterr(under='ignore')
 # Set numpy print format
 np.set_printoptions(precision=2, floatmode='fixed', sign=' ')
 
-MLE_N_ITER = 10000
-BBVI_N_ITER = 20000
+MLE_N_ITER = 50000
+BBVI_N_ITER = 50000
 VI_FB_N_ITER = 5000
 VI_N_ITER = 5000
 GB_N_ITER = 300
+
+PRINT_EVERY = 50
+CALLBACK_END = '\n'
 
 
 def generate_parameters(dim, p=None, seed=None):
@@ -99,10 +102,10 @@ def run_mle(events, end_time, coeffs_true_dict, seed):
     model.observe(events, end_time)
     # Set callback
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
-        coeffs_start, print_every=500, coeffs_true=coeffs_true,
-        acc_thresh=0.05, dim=dim, default_end="\n")
+        coeffs_start, print_every=PRINT_EVERY, coeffs_true=coeffs_true,
+        acc_thresh=0.05, dim=dim, default_end=CALLBACK_END)
     # Fit model
-    conv = model.fit(x0=coeffs_start, optimizer=torch.optim.Adam, lr=0.05,
+    conv = model.fit(x0=coeffs_start, optimizer=torch.optim.Adam, lr=0.1,
                      lr_sched=0.9999, tol=1e-5, max_iter=MLE_N_ITER,
                      penalty=tsvar.priors.GaussianPrior, C=1e10,
                      seed=None, callback=callback)
@@ -169,12 +172,12 @@ def run_bbvi(events, end_time, coeffs_true_dict, seed):
         x0=posterior().mode(
             coeffs_start[:dim+2*dim**2], coeffs_start[dim+2*dim**2:]
         )[dim+dim**2:],
-        print_every=500,
+        print_every=PRINT_EVERY,
         coeffs_true=coeffs_true,
         acc_thresh=0.05,
         dim=dim,
         link_func=link_func,
-        default_end="\n")
+        default_end=CALLBACK_END)
     # Fit the model
     conv = model.fit(x0=coeffs_start, optimizer=torch.optim.Adam, lr=1e-1,
                      lr_sched=0.9999, tol=1e-6, max_iter=BBVI_N_ITER,
@@ -220,9 +223,9 @@ def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed):
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
-        x0=(as_pr / ar_pr).flatten(), print_every=500,
+        x0=(as_pr / ar_pr).flatten(), print_every=PRINT_EVERY,
         coeffs_true=coeffs_true_dict['adjacency'].flatten(),
-        acc_thresh=0.05, dim=dim, default_end="\n")
+        acc_thresh=0.05, dim=dim, default_end=CALLBACK_END)
     # Fit model
     conv = model.fit(as_pr=as_pr, ar_pr=ar_pr, zc_pr=zc_pr, max_iter=VI_FB_N_ITER,
                      tol=1e-5, callback=callback)
@@ -269,8 +272,9 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
         coeffs_true_dict['adjacency'].flatten()))
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
-        x0=(as_pr / ar_pr).flatten(), print_every=500, coeffs_true=coeffs_true,
-        acc_thresh=0.05, dim=dim, default_end='\n')
+        x0=(as_pr / ar_pr).flatten(), print_every=PRINT_EVERY,
+        coeffs_true=coeffs_true, acc_thresh=0.05, dim=dim,
+        default_end=CALLBACK_END)
     # Fit model
     conv = model.fit(as_pr=as_pr, ar_pr=ar_pr, bs_pr=bs_pr, br_pr=br_pr,
                      zc_pr=zc_pr, max_iter=VI_N_ITER, tol=1e-5, callback=callback)

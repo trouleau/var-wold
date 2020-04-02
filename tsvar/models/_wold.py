@@ -90,7 +90,8 @@ class WoldModelBetaJ(Model):
         self.events = []
         for i in range(self.dim):
             self.events.append(torch.cat((
-                events[i], torch.tensor([self.end_time], dtype=torch.float))))
+                events[i], torch.tensor([self.end_time], dtype=torch.float,
+                                        device=self.device))))
         self.n_jumps = list(map(len, self.events))
         #
         # Number of parameters of the model
@@ -104,9 +105,11 @@ class WoldModelBetaJ(Model):
         self.delta_ikj, self.valid_mask_ikj = _wold_model_init_cache(events_)
         # Cast numpy output to torch
         self.delta_ikj = [torch.tensor(
-            self.delta_ikj[i], dtype=torch.float) for i in range(self.dim)]
+            self.delta_ikj[i], dtype=torch.float, device=self.device)
+            for i in range(self.dim)]
         self.valid_mask_ikj = [torch.tensor(
-            self.valid_mask_ikj[i], dtype=torch.float) for i in range(self.dim)]
+            self.valid_mask_ikj[i], dtype=torch.float, device=self.device)
+            for i in range(self.dim)]
         self._observed = True
 
     @enforce_observed
@@ -185,7 +188,8 @@ class WoldModel(Model):
         self.events = []
         for i in range(self.dim):
             self.events.append(torch.cat((
-                events[i], torch.tensor([self.end_time], dtype=torch.float))))
+                events[i], torch.tensor([self.end_time], dtype=torch.float,
+                                        device=self.device))))
         self.n_jumps = list(map(len, self.events))
         #
         # Number of parameters of the model
@@ -201,9 +205,11 @@ class WoldModel(Model):
         self.delta_ikj, self.valid_mask_ikj = _wold_model_init_cache(events_)
         # Cast numpy output to torch
         self.delta_ikj = [torch.tensor(
-            self.delta_ikj[i], dtype=torch.float) for i in range(self.dim)]
+            self.delta_ikj[i], dtype=torch.float, device=self.device)
+            for i in range(self.dim)]
         self.valid_mask_ikj = [torch.tensor(
-            self.valid_mask_ikj[i], dtype=torch.float) for i in range(self.dim)]
+            self.valid_mask_ikj[i], dtype=torch.float, device=self.device)
+            for i in range(self.dim)]
         self._observed = True
 
     @enforce_observed

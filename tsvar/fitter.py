@@ -140,7 +140,7 @@ class FitterSGD(Fitter):
         else:
             self.penalty = None
         # Initialize estimate
-        self.coeffs = x0.clone().detach().requires_grad_(True)
+        self.coeffs = x0.clone().detach().to(self.device).requires_grad_(True)
         # Reset optimizer & scheduler
         self.optimizer = optimizer([self.coeffs], lr=lr)
         self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer,
@@ -183,7 +183,7 @@ class FitterVariationalEM(Fitter):
         condition = ((self._n_iter_done + 1) % self.mstep_interval == 0
                      and self._n_iter_done > self.mstep_offset)
         if condition:
-            self.hyper_parameter_learn(self.coeffs.detach(),
+            self.hyper_parameter_learn(self.coeffs.detach().to(self.device),
                                        momentum=self.mstep_momentum)
 
     @enforce_observed
@@ -239,7 +239,7 @@ class FitterVariationalEM(Fitter):
         self.mstep_offset = mstep_offset
         self.mstep_momentum = mstep_momentum
         # Initialize estimate
-        self.coeffs = x0.clone().detach().requires_grad_(True)
+        self.coeffs = x0.clone().detach().to(self.device).requires_grad_(True)
         # Reset optimizer & scheduler
         self.optimizer = optimizer([self.coeffs], lr=lr)
         self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer,

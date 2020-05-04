@@ -103,9 +103,12 @@ class LearnerCallbackMLE:
                 acc = metrics.accuracy(adj_test=coeffs[-self.dim**2:],
                                        adj_true=self.coeffs_true[-self.dim**2:],
                                        threshold=self.acc_thresh)
+                f1score = metrics.fscore(adj_test=coeffs[-self.dim**2:],
+                                         adj_true=self.coeffs_true[-self.dim**2:],
+                                         threshold=self.acc_thresh)
                 relerr = metrics.relerr(adj_test=coeffs[-self.dim**2:],
                                         adj_true=self.coeffs_true[-self.dim**2:])
-                message += f" | acc: {acc:.2f} | relerr: {relerr:.2f}"
+                message += f" | acc: {acc:.2f} | f1-score: {f1score:.2f} | relerr: {relerr:.2f}"
             # runtime widget
             message += f" | time/it: {time_diff:.2e}"
             # print message

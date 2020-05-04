@@ -50,7 +50,7 @@ class FitterIterativeNumpy(Fitter):
             np.random.seed(seed)
         # Set callable if None
         if callback is None:
-            def callback(arg): pass
+            def callback(arg, end=''): pass
         for t in range(max_iter):
             self._n_iter_done = t
             # Run iteration

@@ -30,14 +30,14 @@ def generate_parameters(dim, p=None, seed=None):
     if p is None:
         p = 2 * np.log(dim) / dim
     # Sample baseline rates
-    baseline = np.random.uniform(0.0, 0.1, size=dim).round(4)
+    baseline = np.random.uniform(0.0, 0.05, size=dim).round(4)
     # Sample beta
-    beta = np.random.uniform(0.0, 2.0, size=(dim, dim)).round(4)
+    beta = np.random.uniform(0.0, 1.0, size=(dim, dim)).round(4)
     # Sample adjacency (itera until a stable process is found)
     for _ in range(10):
         adjacency = np.random.binomial(n=1, p=p, size=(dim, dim))
         adjacency = adjacency.astype(float)
-        adjacency *= np.random.uniform(0.1, 0.2, size=(dim, dim))
+        adjacency *= np.random.uniform(0.05, 0.2, size=(dim, dim))
         adjacency = adjacency.round(4)
         # Check stability
         wold_sim = tsvar.simulate.MultivariateWoldSimulator(
@@ -262,8 +262,8 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
     as_pr = 1.0 * np.ones((dim + 1, dim))
     ar_pr = 1.0 * np.ones((dim + 1, dim))
     # prior: Beta
-    bs_pr = 100.0 * np.ones((dim, dim))
-    br_pr = 100.0 * np.ones((dim, dim))
+    bs_pr = 40.0 * np.ones((dim, dim))
+    br_pr = 40.0 * np.ones((dim, dim))
     # prior: Z
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Extract ground truth (for callback, only alphas)

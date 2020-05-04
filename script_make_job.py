@@ -6,6 +6,7 @@ Generate a parameters for a job, i.e.:
         - a list of `num_sims` simulation seeds
 """
 import argparse
+import time
 import json
 import os
 
@@ -30,8 +31,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if os.path.exists(args.exp_dir) and len(os.listdir(args.exp_dir)) > 0:
-        raise ValueError('Experiment directory already exists. Abort!')
+    # Set timestamps for experiment dir suffix
+    exp_suffix = f"{time.time():.0f}"
+
+    # if os.path.exists(args.exp_dir) and len(os.listdir(args.exp_dir)) > 0:
+    #     raise ValueError('Experiment directory already exists. Abort!')
+
     # Empty dir might exists from previous bogus call
     if not os.path.exists(args.exp_dir):
         os.mkdir(args.exp_dir)
@@ -57,8 +62,12 @@ if __name__ == "__main__":
         }
 
         # Set the sub-experiment directory (for this set of parameters)
+        sub_exp_name = (f'g{graph_idx:02d}-'       # graph
+                        f'd{args.dim:02d}-'        # dim
+                        f'n{args.max_jumps:06d}-'  # num events
+                        f'{exp_suffix:s}')         # time of generation
         sub_exp_dir = os.path.join(
-            args.exp_dir, f'g{graph_idx:02d}-n{args.max_jumps:06d}')
+            args.exp_dir, sub_exp_name)
         # Creat sub-exp diretory
         os.mkdir(sub_exp_dir)
 

@@ -12,13 +12,15 @@ np.seterr(under='ignore')
 # Set numpy print format
 np.set_printoptions(precision=2, floatmode='fixed', sign=' ')
 
-MLE_N_ITER = 50000
-BBVI_N_ITER = 50000
-VI_FB_N_ITER = 5000
-VI_N_ITER = 5000
+
+MLE_N_ITER = 20000
+BBVI_N_ITER = 20000
+VI_FB_N_ITER = 1000
+VI_N_ITER = 1000
 GB_N_ITER = 300
 
-PRINT_EVERY = 50
+PRINT_EVERY = 500
+PRINT_EVERY_VI = 50
 CALLBACK_END = '\n'
 
 
@@ -106,7 +108,7 @@ def run_mle(events, end_time, coeffs_true_dict, seed):
         acc_thresh=0.05, dim=dim, default_end=CALLBACK_END)
     # Fit model
     conv = model.fit(x0=coeffs_start, optimizer=torch.optim.Adam, lr=0.1,
-                     lr_sched=0.9999, tol=1e-5, max_iter=MLE_N_ITER,
+                     lr_sched=0.9999, tol=1e-4, max_iter=MLE_N_ITER,
                      penalty=tsvar.priors.GaussianPrior, C=1e10,
                      seed=None, callback=callback)
     coeffs_hat = model.coeffs.detach().numpy()
@@ -223,7 +225,7 @@ def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed):
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
-        x0=(as_pr / ar_pr).flatten(), print_every=PRINT_EVERY,
+        x0=(as_pr / ar_pr).flatten(), print_every=PRINT_EVERY_VI,
         coeffs_true=coeffs_true_dict['adjacency'].flatten(),
         acc_thresh=0.05, dim=dim, default_end=CALLBACK_END)
     # Fit model
@@ -267,21 +269,21 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
     # prior: Z
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Extract ground truth (for callback, only alphas)
-    coeffs_true = np.hstack((
-        coeffs_true_dict['baseline'],
-        coeffs_true_dict['adjacency'].flatten()))
+    coeffs_true = coeffs_true_dict['adjacency'].flatten().copy()
+    coeffs_start = (as_pr / ar_pr)[1:, :].flatten()  # start at mean of prior of adjacency (ignore baseline)
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
-        x0=(as_pr / ar_pr).flatten(), print_every=PRINT_EVERY,
+        x0=coeffs_start, print_every=PRINT_EVERY_VI,
         coeffs_true=coeffs_true, acc_thresh=0.05, dim=dim,
         default_end=CALLBACK_END)
     # Fit model
     conv = model.fit(as_pr=as_pr, ar_pr=ar_pr, bs_pr=bs_pr, br_pr=br_pr,
-                     zc_pr=zc_pr, max_iter=VI_N_ITER, tol=1e-5, callback=callback)
+                     zc_pr=zc_pr, max_iter=VI_N_ITER, tol=1e-4,
+                     callback=callback)
     # Print results
     print('\nConverged?', conv)
-    coeffs_hat_mean = model.alpha_posterior_mean().flatten()
-    coeffs_hat_mode = model.alpha_posterior_mode().flatten()
+    coeffs_hat_mean = model.alpha_posterior_mean()[1:, :].flatten()  # only adjacency (ignore baseline)
+    coeffs_hat_mode = model.alpha_posterior_mode()[1:, :].flatten()  # only adjacency (ignore baseline)
     max_diff_mean = np.max(np.abs(coeffs_true - coeffs_hat_mean))
     max_diff_mode = np.max(np.abs(coeffs_true - coeffs_hat_mode))
     print(f'  - coeffs_hat_mean:  {coeffs_hat_mean.round(2)}')
@@ -339,5 +341,8 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
         'adjacency': granger_model.Alpha_.toarray().tolist()
     }
     res_dict['conv'] = True
-    res_dict['history'] = {'time': [run_time]}
+    res_dict['history'] = {
+        'iter': [GB_N_ITER],          # number of iter
+        'time': [run_time/GB_N_ITER]  # runtime per iter (`run_time` is computed outside the iter loop for gb)
+    }
     return res_dict

@@ -110,8 +110,11 @@ def nrmse(adj_test, adj_true):
 def relerr(adj_test, adj_true):
     mask = adj_true > 0
     n_nodes = adj_true.shape[0]
-    rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum() / adj_true[mask].min()
-    # rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum()
-    # rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask])
-    # rel_err = np.sum(np.abs(adj_test - adj_true))
+    try:
+        rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum() / adj_true[mask].min()
+        # rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum()
+        # rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask])
+        # rel_err = np.sum(np.abs(adj_test - adj_true))
+    except Exception:
+        rel_err = np.nan
     return rel_err / n_nodes

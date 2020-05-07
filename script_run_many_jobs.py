@@ -110,7 +110,7 @@ if __name__ == "__main__":
     pool_args = list()
 
     # For each sub-experiment (each set of parameters)
-    for param_fname in glob.glob(search_pattern):
+    for param_fname in sorted(glob.glob(search_pattern)):
         # Extract sub-experiment directory
         sub_exp_dir = os.path.split(param_fname)[0]
         # For each simulation

@@ -285,7 +285,7 @@ class FitterVariationalEM(Fitter):
             if (t+1) % 10 == 0:
                 # Check convergence in callback (if available)
                 if hasattr(callback, 'has_converged'):
-                    if callback.has_converged(n=10):
+                    if callback.has_converged(n=10, threhshold=4e-4):
                         callback(self, end='\n')  # Callback before the end
                         return True
                 # Or, check convergence in fitter, and then callback

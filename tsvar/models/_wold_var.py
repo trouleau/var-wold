@@ -14,7 +14,7 @@ EPS = 1e-8  # Finite-difference gradient epsilon
 
 
 CACHE = False
-PARALLEL = False
+PARALLEL = True
 
 warnings.filterwarnings("ignore")  # To handle NumbaPendingDeprecationWarning
 
@@ -327,13 +327,12 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
             bs_pr=self._bs_pr, br_pr=self._br_pr, dt_ik=self.dt_ik,
             delta_ikj=self.delta_ikj, valid_mask_ikj=self.valid_mask_ikj)
 
-        if (np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)) or
-           np.any(self._b_x0 > 1e10) or np.any(self._b_xn > 1e10)):
-            raise RuntimeError('Nope nope nope...')
-
         # # (debug) Sanity check
         # if (self._as_po.min() < 0) or (self._as_po.min() < 0):
         #     raise RuntimeError("Negative posterior parameter!")
+        # if (np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)) or
+        #    np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10)):
+        #     raise RuntimeError('Nope nope nope...')
 
         # Update Z
         self._zp_po = _update_z(as_po=self._as_po,

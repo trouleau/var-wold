@@ -14,6 +14,7 @@ EPS = 1e-8  # Finite-difference gradient epsilon
 
 
 CACHE = False
+PARALLEL = False
 
 warnings.filterwarnings("ignore")  # To handle NumbaPendingDeprecationWarning
 
@@ -58,7 +59,7 @@ def approx_beta_density(beta_range, j, i, x0, xn, n, as_po, ar_po, zp_po, bs_pr,
     return post
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def digamma(arr, eps=EPS):
     """Digamma function (arr is assumed to be 1 or 2 dimensional)"""
     lgamma_prime = np.zeros_like(arr)
@@ -72,39 +73,39 @@ def digamma(arr, eps=EPS):
     return lgamma_prime
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def expect_alpha(as_po, ar_po):
     """Compute the expectation of alpha"""
     return as_po / ar_po
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def expect_log_alpha(as_po, ar_po):
     """Compute the expectation of log(alpha)"""
     return digamma(as_po) - np.log(ar_po)
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def expect_z(zp_po):
     """Compute the expectation of z"""
     return zp_po
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def expect_inv_beta_p_delta(bs_po, br_po, delta):
     """Compute the expectation of 1/(beta + delta)"""
     b_mean = br_po / (bs_po - 1)
     return 1 / (b_mean + delta)
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def expect_log_beta_p_delta(bs_po, br_po, delta):
     """Compute the expectation of log(beta + delta)"""
     b_mean = br_po / (bs_po - 1)
     return np.log(b_mean + delta)
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
 
     a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
@@ -144,7 +145,7 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
     return func, fprime, fprime2
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     """
     Solve the equation to to find the parameters of the posterior of beta.
@@ -202,7 +203,7 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ik, delta_ikj, valid_mas
     return as_po, ar_po
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                  dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_po.shape[1]

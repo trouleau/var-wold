@@ -13,7 +13,7 @@ MOMENT_ORDER = 5  # Moment of equation to solve for beta update
 EPS = 1e-8  # Finite-difference gradient epsilon
 
 
-CACHE = True
+CACHE = False
 
 warnings.filterwarnings("ignore")  # To handle NumbaPendingDeprecationWarning
 

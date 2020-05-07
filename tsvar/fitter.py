@@ -160,10 +160,23 @@ class FitterSGD(Fitter):
             # Check that the optimization did not fail
             if torch.isnan(self.coeffs).any():
                 raise ValueError('NaNs in coeffs! Stop optimization...')
-            # Convergence check and callback
-            if self._check_convergence(tol):
-                callback(self, end='\n')  # Callback before the end
-                return True
+
+            # # Convergence check and callback
+            # if self._check_convergence(tol):
+            #     callback(self, end='\n')  # Callback before the end
+            #     return True
+
+            if (t+1) % 10 == 0:
+                # Check convergence in callback (if available)
+                if hasattr(callback, 'has_converged'):
+                    if callback.has_converged(n=10):
+                        callback(self, end='\n')  # Callback before the end
+                        return True
+                # Or, check convergence in fitter, and then callback
+                if self._check_convergence(tol):
+                    callback(self, end='\n')  # Callback before the end
+                    return True
+
             callback(self)  # Callback at each iteration
         return False
 
@@ -262,10 +275,23 @@ class FitterVariationalEM(Fitter):
             # Check that the optimization did not fail
             if torch.isnan(self.coeffs).any():
                 raise ValueError('NaNs in coeffs! Stop optimization...')
-            # Convergence check and callback
-            if self._check_convergence(tol):
-                callback(self, end='\n')  # Callback before the end
-                print('Converged!')
-                return True
+
+            # # Convergence check and callback
+            # if self._check_convergence(tol):
+            #     callback(self, end='\n')  # Callback before the end
+            #     print('Converged!')
+            #     return True
+
+            if (t+1) % 10 == 0:
+                # Check convergence in callback (if available)
+                if hasattr(callback, 'has_converged'):
+                    if callback.has_converged(n=10):
+                        callback(self, end='\n')  # Callback before the end
+                        return True
+                # Or, check convergence in fitter, and then callback
+                if self._check_convergence(tol):
+                    callback(self, end='\n')  # Callback before the end
+                    return True
+
             callback(self)  # Callback at each iteration
         return False

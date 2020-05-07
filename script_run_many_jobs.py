@@ -134,13 +134,18 @@ if __name__ == "__main__":
     print(f"Start {len(pool_args):d} experiments on a pool of {args.n_workers:d} workers")
     print(f"=============================================================================")
 
-    # Init pool of workers
-    pool = Pool(args.n_workers)
-    # Run all simulations
-    pool.starmap_async(run_single_job, pool_args)
-    # Close pool
-    pool.close()
-    # Wait for them to finish
-    pool.join()
+    if args.n_workers > 1:
+        # Init pool of workers
+        pool = Pool(args.n_workers)
+        # Run all simulations
+        pool.starmap_async(run_single_job, pool_args)
+        # Close pool
+        pool.close()
+        # Wait for them to finish
+        pool.join()
+    else:
+        # Single process
+        for args in pool_args:
+            run_single_job(*args)
 
     print('Job Done.')

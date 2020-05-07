@@ -60,15 +60,16 @@ class FitterIterativeNumpy(Fitter):
             if np.isnan(self.coeffs).any():
                 raise ValueError('NaNs in coeffs! Stop optimization...')
 
-            # Check convergence in callback (if available)
-            if hasattr(callback, 'has_converged'):
-                if callback.has_converged():
+            if (t+1) % 10 == 0:
+                # Check convergence in callback (if available)
+                if hasattr(callback, 'has_converged'):
+                    if callback.has_converged():
+                        callback(self, end='\n')  # Callback before the end
+                        return True
+                # Or, check convergence in fitter, and then callback
+                elif self._check_convergence(tol):
                     callback(self, end='\n')  # Callback before the end
                     return True
-            # Or, check convergence in fitter, and then callback
-            elif self._check_convergence(tol):
-                callback(self, end='\n')  # Callback before the end
-                return True
 
             callback(self)  # Callback at each iteration
         return False

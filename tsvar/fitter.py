@@ -67,7 +67,7 @@ class FitterIterativeNumpy(Fitter):
                         callback(self, end='\n')  # Callback before the end
                         return True
                 # Or, check convergence in fitter, and then callback
-                elif self._check_convergence(tol):
+                if self._check_convergence(tol):
                     callback(self, end='\n')  # Callback before the end
                     return True
 

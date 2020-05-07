@@ -349,7 +349,7 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
     @enforce_observed
     def fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr, *args, **kwargs):
         self._init_fit(as_pr, ar_pr, bs_pr, br_pr, zc_pr)
-        return super()._fit(step_function=self._iteration, *args, **kwargs)
+        return super().fit(step_function=self._iteration, *args, **kwargs)
 
     def alpha_posterior_mean(self, as_po=None, ar_po=None):
         if (as_po is None) and (ar_po is None):

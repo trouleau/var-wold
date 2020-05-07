@@ -55,13 +55,21 @@ class FitterIterativeNumpy(Fitter):
             self._n_iter_done = t
             # Run iteration
             step_function()
-            # Check that the optimization did not fail
+
+            # Sanity check that the optimization did not fail
             if np.isnan(self.coeffs).any():
                 raise ValueError('NaNs in coeffs! Stop optimization...')
-            # Convergence check and callback
-            if self._check_convergence(tol):
+
+            # Check convergence in callback (if available)
+            if hasattr(callback, 'has_converged'):
+                if callback.has_converged():
+                    callback(self, end='\n')  # Callback before the end
+                    return True
+            # Or, check convergence in fitter, and then callback
+            elif self._check_convergence(tol):
                 callback(self, end='\n')  # Callback before the end
                 return True
+
             callback(self)  # Callback at each iteration
         return False
 

@@ -39,6 +39,9 @@ class History:
     def __str__(self):
         return str(self._list)
 
+    def __len__(self):
+        return len(self._list)
+
 
 class LearnerCallbackMLE:
 
@@ -47,8 +50,8 @@ class LearnerCallbackMLE:
         self.print_every = print_every
         self.default_end = default_end
         self.n_params = len(x0)
-        # If grount is provided, compute other stuff
-        if coeffs_true is not None:
+
+        if coeffs_true is not None:  # If ground truth is provided
             self.has_ground_truth = True
             self.coeffs_true = coeffs_true.flatten()
             self.dim = dim
@@ -56,10 +59,21 @@ class LearnerCallbackMLE:
             if link_func is None:
                 def link_func(coeffs): return coeffs
             self.link_func = link_func
-        else:
+            # Init history (with ground truth metrics)
+            self.history = History(field_names=(
+                'coeffs',
+                # 'loss',
+                'iter', 'time',
+                'accuracy', 'f1score', 'relerr'))
+
+        else:  # If ground truth is **not** provided
             self.has_ground_truth = False
-        # Init history
-        self.history = History(field_names=('coeffs', 'loss', 'iter', 'time'))
+            # Init history (without ground truth metrics)
+            self.history = History(field_names=(
+                'coeffs',
+                # 'loss',
+                'iter', 'time'))
+
         # Init previous variables for differential computation
         self.last_time = time.time()
         self.last_iter = 0
@@ -88,9 +102,6 @@ class LearnerCallbackMLE:
             # Compute difference in vars since last call
             x_diff = np.abs(self.last_coeffs - coeffs).max()
             time_diff = (call_time - self.last_time) / (t - self.last_iter)
-            # Add to history
-            self.history.append(coeffs=coeffs.tolist(), loss=loss,
-                                iter=t, time=time_diff)
             # Write message
             # base
             message = f"\riter: {t:>5d} | dx: {x_diff:+.4e}"
@@ -109,6 +120,19 @@ class LearnerCallbackMLE:
                 relerr = metrics.relerr(adj_test=coeffs[-self.dim**2:],
                                         adj_true=self.coeffs_true[-self.dim**2:])
                 message += f" | acc: {acc:.2f} | f1-score: {f1score:.2f} | relerr: {relerr:.2f}"
+                # Add to history
+                self.history.append(
+                    coeffs=coeffs.tolist(),
+                    # loss=loss,
+                    iter=t, time=time_diff,
+                    accuracy=acc, f1score=f1score, relerr=relerr)
+            else:
+                # Add to history
+                self.history.append(
+                    coeffs=coeffs.tolist(),
+                    # loss=loss,
+                    iter=t, time=time_diff)
+
             # runtime widget
             message += f" | time/it: {time_diff:.2e}"
             # print message
@@ -119,6 +143,14 @@ class LearnerCallbackMLE:
         # Update last vars
         self.last_coeffs = coeffs
         self.last_loss = loss
+
+    def has_converged(self, metric='relerr', n=100, threhshold=1e-4):
+        # NOTE: history must have enough elements for averaging
+        if len(self.history) >= max(2, n):
+            val = np.mean(np.abs(np.diff(self.history[metric][-n:])))
+            if val < threhshold:
+                return True
+        return False
 
     def to_dict(self):
         """Serialize the history into a dict of field: list of values"""

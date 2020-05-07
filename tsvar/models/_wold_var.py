@@ -1,6 +1,7 @@
 import warnings
 import numpy as np
-import scipy.special as sc
+# import scipy.special as sc
+import math
 import numba
 
 from . import WoldModel
@@ -8,8 +9,11 @@ from ..utils.decorators import enforce_observed
 from ..fitter import FitterIterativeNumpy
 
 
-MOMENT_ORDER = 5
+MOMENT_ORDER = 5  # Moment of equation to solve for beta update
+EPS = 1e-8  # Finite-difference gradient epsilon
 
+
+CACHE = True
 
 warnings.filterwarnings("ignore")  # To handle NumbaPendingDeprecationWarning
 
@@ -54,76 +58,94 @@ def approx_beta_density(beta_range, j, i, x0, xn, n, as_po, ar_po, zp_po, bs_pr,
     return post
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+def digamma(arr, eps=EPS):
+    """Digamma function (arr is assumed to be 1 or 2 dimensional)"""
+    lgamma_prime = np.zeros_like(arr)
+    if arr.ndim == 1:
+        for i in numba.prange(arr.shape[0]):
+            lgamma_prime[i] = (math.lgamma(arr[i] + eps) - math.lgamma(arr[i])) / eps
+    elif arr.ndim == 2:
+        for j in numba.prange(arr.shape[0]):
+            for i in numba.prange(arr.shape[1]):
+                lgamma_prime[j, i] = (math.lgamma(arr[j, i] + eps) - math.lgamma(arr[j, i])) / eps
+    return lgamma_prime
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
 def expect_alpha(as_po, ar_po):
     """Compute the expectation of alpha"""
     return as_po / ar_po
 
 
-# @numba.jit(nopython=True)  # NOTE: cannot jit due to call to `sc.digamma`
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
 def expect_log_alpha(as_po, ar_po):
     """Compute the expectation of log(alpha)"""
-    return sc.digamma(as_po) - np.log(ar_po)
+    return digamma(as_po) - np.log(ar_po)
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
 def expect_z(zp_po):
     """Compute the expectation of z"""
     return zp_po
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
 def expect_inv_beta_p_delta(bs_po, br_po, delta):
     """Compute the expectation of 1/(beta + delta)"""
     b_mean = br_po / (bs_po - 1)
     return 1 / (b_mean + delta)
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
 def expect_log_beta_p_delta(bs_po, br_po, delta):
     """Compute the expectation of log(beta + delta)"""
     b_mean = br_po / (bs_po - 1)
     return np.log(b_mean + delta)
 
 
-# FIXME: between func, fprime and fprime2, we recompute many times the same thing
-# NOTE: the `j` indices differ by 1 betwee parameters of beta and the other ones... This indexing makes nasty bugs easily introduced.
-@numba.jit(nopython=True, fastmath=True)
-def func(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
-    x_p_delta = x + delta[i][:, j+1] + 1e-20
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+
     a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
-    return ((bs_pr[j, i] + 1 - n) / x
-            - br_pr[j, i] / (x ** 2)
-            + np.sum(valid_mask[i][:, j+1] * (
-                zp_po[i][:, j+1] / x_p_delta
-                - a_mean * dts[i] / (x_p_delta ** 2))))
-
-
-@numba.jit(nopython=True, fastmath=True)
-def fprime(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     x_p_delta = x + delta[i][:, j+1] + 1e-20
-    a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
-    return (-(bs_pr[j, i] + 1 - n) / x ** 2
-            + 2 * br_pr[j, i] / x ** 3
-            + np.sum(valid_mask[i][:, j+1] * (
-                -zp_po[i][:, j+1] / x_p_delta ** 2
-                + 2 * a_mean * dts[i] / x_p_delta ** 3)))
+
+    term1 = (bs_pr[j, i] + 1 - n) / x
+    term2 = br_pr[j, i] / (x ** 2)
+
+    mask = valid_mask[i][:, j+1]
+    term31 = zp_po[i][:, j+1] / x_p_delta
+    term32 = a_mean * dts[i] / (x_p_delta ** 2)
+
+    func = term1 - term2 + np.sum(mask * (term31 - term32))
+
+    term1 *= -1
+    term1 /= x
+    term2 *= -2
+    term2 /= x
+    term31 *= -1
+    term31 /= x_p_delta
+    term32 *= -2
+    term32 /= x_p_delta
+
+    fprime = term1 - term2 + np.sum(mask * (term31 - term32))
+
+    term1 *= -2
+    term1 /= x
+    term2 *= -3
+    term2 /= x
+    term31 *= -2
+    term31 /= x_p_delta
+    term32 *= -3
+    term32 /= x_p_delta
+
+    fprime2 = term1 - term2 + np.sum(mask * (term31 - term32))
+
+    return func, fprime, fprime2
 
 
-@numba.jit(nopython=True, fastmath=True)
-def fprime2(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
-    x_p_delta = x + delta[i][:, j+1] + 1e-20
-    a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
-    return (2 * (bs_pr[j, i] + 1 - n) / x ** 3
-            - 6 * br_pr[j, i] / x ** 4
-            + np.sum(valid_mask[i][:, j+1] * (
-                2 * zp_po[i][:, j+1] / x_p_delta ** 3
-                - 6 * a_mean * dts[i] / x_p_delta ** 4)))
-
-
-@numba.jit(nopython=True, fastmath=True)
-def solve_halley(func, fprime, fprime2, xstart, max_iter, tol, j, i, n,
-                 bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
+def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     """
     Solve the equation to to find the parameters of the posterior of beta.
 
@@ -151,10 +173,9 @@ def solve_halley(func, fprime, fprime2, xstart, max_iter, tol, j, i, n,
         Indicator of convergence
     """
     x = float(xstart)
-    for it in range(max_iter):
-        f = func(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
-        fp = fprime(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
-        fpp = fprime2(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
+    for it in numba.prange(max_iter):
+        f, fp, fpp = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                                 dts, delta, valid_mask)
         x_new = x - (2 * f * fp) / (2 * fp**2 - f * fpp)
         if abs(x - x_new) < tol:
             return x
@@ -162,35 +183,36 @@ def solve_halley(func, fprime, fprime2, xstart, max_iter, tol, j, i, n,
     return x
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, cache=CACHE)
 def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_pr.shape[1]
     as_po = np.zeros_like(as_pr)  # Alpha posterior shape, to return
     ar_po = np.zeros_like(as_pr)  # Alpha posterior rate, to return
-    for i in range(dim):
+    for i in numba.prange(dim):
         # update shape
         as_po[:, i] = as_pr[:, i] + zp_po[i].sum(axis=0)
         # update rate
+        ar_po[0, i] = ar_pr[0, i] + (valid_mask_ikj[i][:, 0] * dt_ik[i]).sum(axis=0)
+
         D_i_kj = (valid_mask_ikj[i][:, 1:] * np.expand_dims(dt_ik[i], 1) *
                   expect_inv_beta_p_delta(bs_po[:, i], br_po[:, i],
                                           delta_ikj[i][:, 1:] + 1e-20))
-        ar_po[0, i] = ar_pr[0, i] + dt_ik[i].sum(axis=0)
+
         ar_po[1:, i] = ar_pr[1:, i] + D_i_kj.sum(axis=0)
     return as_po, ar_po
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, parallel=True, cache=CACHE)
 def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                  dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_po.shape[1]
     max_iter = 10
-    tol = 1e-10
+    tol = 1e-5
     bs_po = np.ones_like(bs_pr)
     br_po = np.ones_like(bs_pr)
-    for j in range(dim):
-        for i in range(dim):
-            x0[j, i] = solve_halley(func=func, fprime=fprime, fprime2=fprime2,
-                                    xstart=float(x0[j, i]), max_iter=max_iter,
+    for j in numba.prange(dim):
+        for i in numba.prange(dim):
+            x0[j, i] = solve_halley(xstart=float(x0[j, i]), max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=0,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -198,8 +220,7 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
-            xn[j, i] = solve_halley(func=func, fprime=fprime, fprime2=fprime2,
-                                    xstart=float(xn[j, i]), max_iter=max_iter,
+            xn[j, i] = solve_halley(xstart=float(xn[j, i]), max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=MOMENT_ORDER,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -212,36 +233,33 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
     return bs_po, br_po, x0, xn
 
 
-# @numba.jit(nopython=True)  # NOTE: cannot jit due to call to `sc.digamma`
-def _update_z(as_po, ar_po, bs_po, br_po, delta_ikj, valid_mask_ikj, eps):
+@numba.jit(nopython=True, fastmath=True, cache=CACHE)
+def _compute_epi(i, as_po, ar_po, bs_po, br_po, dt_ik, delta_ikj, valid_mask_ikj):
+    # log(inter-arrival time), only for valid events
+    epi = np.log(valid_mask_ikj[i] * np.expand_dims(dt_ik[i], 1) + 1e-20)
+    # Expected value log(alpha)
+    a_mean = expect_log_alpha(as_po[:, i], ar_po[:, i])
+    epi += np.expand_dims(a_mean, 0)
+    # Expected value log(beta + delta), only for j>=1, i.e. ignore baseline
+    epi[:, 1:] -= (valid_mask_ikj[i][:, 1:] *
+                   expect_log_beta_p_delta(bs_po[:, i], br_po[:, i],
+                                           delta_ikj[i][:, 1:] + 1e-20))
+    return epi
+
+
+@numba.jit(nopython=True, fastmath=True, cache=CACHE)
+def _update_z(as_po, ar_po, bs_po, br_po, dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_po.shape[1]
-    zp = list()
+    zs = list()
     for i in range(dim):
-        epi = np.zeros_like(delta_ikj[i])
-
-        # Expected value log(alpha)
-
-        # epi += (sc.digamma(as_po[np.newaxis, :, i])
-        #         - np.log(ar_po[np.newaxis, :, i]))
-        epi += expect_log_alpha(as_po[np.newaxis, :, i],
-                                ar_po[np.newaxis, :, i])
-
-        # a, x from p(a, x) in notes
-        # a = bs_po[:, i]
-        # x = br_po[:, i] / (delta_ikj[i][:, 1:] + 1e-20)
-        # epi[:, 1:] -= (np.log(br_po[:, i]) - sc.digamma(bs_po[:, i])
-        #                - (valid_mask_ikj[i][:, 1:]
-        #                   * (sc.gammainc(a + eps, x) / (sc.gammainc(a, x) + 1e-20) - 1) / eps))
-        epi[:, 1:] -= expect_log_beta_p_delta(bs_po[:, i],
-                                              br_po[:, i],
-                                              delta_ikj[i][:, 1:] + 1e-20)
-
+        epi = _compute_epi(i, as_po, ar_po, bs_po, br_po, dt_ik, delta_ikj,
+                           valid_mask_ikj)
         # Softmax
-        epi = epi - epi.max(axis=1)[:, np.newaxis]
+        epi -= epi.max()
         epi = np.exp(epi)
-        epi /= epi.sum(axis=1)[:, np.newaxis]
-        zp.append(epi)
-    return zp
+        epi /= np.expand_dims(epi.sum(axis=1), 1)
+        zs.append(epi)
+    return zs
 
 
 class WoldModelVariational(WoldModel, FitterIterativeNumpy):
@@ -287,7 +305,7 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
         self._zp_po = list()  # Z posterior, probabilities of Categorical distribution
         for i in range(self.dim):
             self._zp_po.append(self._zc_pr[i]
-                               / self._zc_pr[i].sum(axis=1)[:, np.newaxis])
+                               / self._zc_pr[i].sum(axis=1)[:, None])
 
     def _iteration(self):
 
@@ -321,9 +339,9 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                 ar_po=self._ar_po,
                                 bs_po=self._bs_po,
                                 br_po=self._br_po,
+                                dt_ik=self.dt_ik,
                                 delta_ikj=self.delta_ikj,
-                                valid_mask_ikj=self.valid_mask_ikj,
-                                eps=1e-8)
+                                valid_mask_ikj=self.valid_mask_ikj)
 
         # Set coeffs attribute for Fitter to assess convergence
         self.coeffs = expect_alpha(as_po=self._as_po, ar_po=self._ar_po)[1:, :].flatten()
@@ -331,7 +349,7 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
     @enforce_observed
     def fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr, *args, **kwargs):
         self._init_fit(as_pr, ar_pr, bs_pr, br_pr, zc_pr)
-        return super().fit(step_function=self._iteration, *args, **kwargs)
+        return super()._fit(step_function=self._iteration, *args, **kwargs)
 
     def alpha_posterior_mean(self, as_po=None, ar_po=None):
         if (as_po is None) and (ar_po is None):

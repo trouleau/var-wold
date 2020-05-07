@@ -52,7 +52,7 @@ class WoldModelVariationalFixedBeta(WoldModel, FitterIterativeNumpy):
                 np.ones((self.n_jumps[i]-1, 1)),
                 self.valid_mask_ikj[i][:-1, :].numpy()))
             delta_ikj_i = np.hstack((
-                np.zeros((self.n_jumps[i]-1, 1)),
+                np.ones((self.n_jumps[i]-1, 1)),
                 self.delta_ikj[i][:-1, :].numpy()))
             dts = np.hstack((self.events[i][0], np.diff(self.events[i])))
             self.D_ikj[i] = (valid_mask_ikj_i

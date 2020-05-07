@@ -1,6 +1,8 @@
-from multiprocessing import Process, cpu_count
+from multiprocessing import Pool, cpu_count
+from datetime import datetime
 import numpy as np
 import argparse
+import time
 import json
 import glob
 import sys
@@ -17,6 +19,12 @@ torch.set_num_threads(1)
 
 
 def run_single_job(param_fname, out_fname, sim_idx, stdout=None, stderr=None):
+
+    # Log in main std before redirecting
+    job_args = (param_fname, out_fname, sim_idx)
+    job_start_time = str(datetime.now())
+    print('Starting job:', job_args, 'at', job_start_time,
+          file=sys.__stdout__, flush=True)
 
     # Redirect stdout/stderr
     if stdout is not None:
@@ -120,30 +128,19 @@ if __name__ == "__main__":
             pool_args.append(
                 (param_fname, out_fname, sim_idx, stdout, stderr))
 
-    # Reverse list of args (will be popped from last element)
-    pool_args = pool_args[::-1]
+    # # Reverse list of args (will be popped from last element)
+    # pool_args = pool_args[::-1]
 
     print(f"Start {len(pool_args):d} experiments on a pool of {args.n_workers:d} workers")
     print(f"=============================================================================")
 
-    proc_list = list()
-
-    while len(pool_args) > 0:
-
-        this_args = pool_args.pop()
-
-        print("Start process with parameters:", this_args)
-
-        proc = Process(target=run_single_job, args=this_args)
-        proc_list.append(proc)
-        proc.start()
-
-        if len(proc_list) == args.n_workers:
-            # Wait until all processes are done
-            for proc in proc_list:
-                proc.join()
-            # Reset process list
-            proc_list = list()
-            print()
+    # Init pool of workers
+    pool = Pool(args.n_workers)
+    # Run all simulations
+    pool.starmap_async(run_single_job, pool_args)
+    # Close pool
+    pool.close()
+    # Wait for them to finish
+    pool.join()
 
     print('Job Done.')

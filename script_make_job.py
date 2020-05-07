@@ -62,10 +62,10 @@ if __name__ == "__main__":
         }
 
         # Set the sub-experiment directory (for this set of parameters)
-        sub_exp_name = (f'g{graph_idx:02d}-'       # graph
-                        f'd{args.dim:02d}-'        # dim
-                        f'n{args.max_jumps:06d}-'  # num events
-                        f'{exp_suffix:s}')         # time of generation
+        sub_exp_name = (f'{exp_suffix:s}'           # time of generation
+                        f'-g{graph_idx:02d}'        # graph
+                        f'-d{args.dim:02d}'         # dim
+                        f'-n{args.max_jumps:06d}')  # num events
         sub_exp_dir = os.path.join(
             args.exp_dir, sub_exp_name)
         # Creat sub-exp diretory

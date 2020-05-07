@@ -13,39 +13,62 @@ np.seterr(under='ignore')
 np.set_printoptions(precision=2, floatmode='fixed', sign=' ')
 
 
-MLE_N_ITER = 20000
+MLE_N_ITER = 15000
 BBVI_N_ITER = 20000
-VI_FB_N_ITER = 1000
-VI_N_ITER = 1000
+VI_FB_N_ITER = 3000
+VI_N_ITER = 3000
 GB_N_ITER = 300
 
-PRINT_EVERY = 500
-PRINT_EVERY_VI = 50
+VI_TOL = 1e-4
+
+PRINT_EVERY = 10
+PRINT_EVERY_VI = 10
 CALLBACK_END = '\n'
 
 
-def generate_parameters(dim, p=None, seed=None):
-    """Generate a random adjacency matrix """
+def generate_parameters(dim, p=None, seed=None, base_range=[0.0, 0.05],
+                        adj_range=[0.05, 0.2], beta_range=[0.0, 1.0]):
+    """Generate a random set of parameters for a simulation.
+
+    Parameters:
+    -----------
+    dim : int
+        Number of dimensions of the process
+    p : float (optional, default: 2*log(dim)/dim)
+        Probability of existence of an edge for Erdos-Renyi adjacency matrix
+    seed : int
+        Random seed
+    base_range : tuple (optional)
+        Min-max range of uniform distribution for baseline values
+    adj_range : tuple (optional)
+        Min-max range of uniform distribution for adjacency values
+    beta_range : tuple (optional)
+        Min-max range of uniform distribution for beta values
+    """
     if seed:
         np.random.seed(seed)
     # Default edge probability (Erdos-Renyi in conected regime)
     if p is None:
         p = 2 * np.log(dim) / dim
-    # Sample baseline rates
-    baseline = np.random.uniform(0.0, 0.05, size=dim).round(4)
-    # Sample beta
-    beta = np.random.uniform(0.0, 1.0, size=(dim, dim)).round(4)
-    # Sample adjacency (itera until a stable process is found)
+    # Sample baseline rates (Uniform)
+    baseline = np.random.uniform(*base_range, size=dim).round(4)
+    # Sample beta (Uniform)
+    beta = np.random.uniform(*beta_range, size=(dim, dim)).round(4)
+    # Sample adjacency (Erdos-Renyi with Uniform weights)
+    # (Iterate until a stable process is found)
     for _ in range(10):
         adjacency = np.random.binomial(n=1, p=p, size=(dim, dim))
         adjacency = adjacency.astype(float)
-        adjacency *= np.random.uniform(0.05, 0.2, size=(dim, dim))
+        adjacency *= np.random.uniform(*adj_range, size=(dim, dim))
         adjacency = adjacency.round(4)
-        # Check stability
-        wold_sim = tsvar.simulate.MultivariateWoldSimulator(
-            mu_a=baseline, alpha_ba=adjacency, beta_ba=beta)
-        if wold_sim.spectral_radius() < 1:
-            return {'baseline': baseline.tolist(),
+        # # Check stability
+        # wold_sim = tsvar.simulate.MultivariateWoldSimulator(
+        #     mu_a=baseline, alpha_ba=adjacency, beta_ba=beta)
+        # if wold_sim.spectral_radius() < 1:
+        #     return {'baseline': baseline.tolist(),
+        #             'beta': beta.tolist(),
+        #             'adjacency': adjacency.tolist()}
+        return {'baseline': baseline.tolist(),
                     'beta': beta.tolist(),
                     'adjacency': adjacency.tolist()}
     raise RuntimeError("Could not generate stable process. Gave up...")
@@ -261,11 +284,11 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
     model.observe(events)
     # Set priors
     # prior: Alpha
-    as_pr = 1.0 * np.ones((dim + 1, dim))
+    as_pr = 0.1 * np.ones((dim + 1, dim))
     ar_pr = 1.0 * np.ones((dim + 1, dim))
     # prior: Beta
-    bs_pr = 40.0 * np.ones((dim, dim))
-    br_pr = 40.0 * np.ones((dim, dim))
+    bs_pr = 10.0 * np.ones((dim, dim))
+    br_pr = 10.0 * np.ones((dim, dim))
     # prior: Z
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Extract ground truth (for callback, only alphas)
@@ -278,7 +301,7 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
         default_end=CALLBACK_END)
     # Fit model
     conv = model.fit(as_pr=as_pr, ar_pr=ar_pr, bs_pr=bs_pr, br_pr=br_pr,
-                     zc_pr=zc_pr, max_iter=VI_N_ITER, tol=1e-4,
+                     zc_pr=zc_pr, max_iter=VI_N_ITER, tol=VI_TOL,
                      callback=callback)
     # Print results
     print('\nConverged?', conv)

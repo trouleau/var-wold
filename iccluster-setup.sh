@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #################### Install basics ###############################################################
 
 # Install stuff
@@ -6,8 +8,7 @@ apt-get install -y git tmux screen vim htop gcc
 
 # Config git
 git config --global user.name "trouleau"
-git config --global user.email "william.trouleau@epfl.ch"
-git config --global credential.helper 'cache --timeout=14400'
+git config --global user.email "william.trouleau@iccluster.epfl.ch"
 
 # Add personal ssh public key to authorized_keys
 mkdir ~/.ssh
@@ -32,12 +33,11 @@ rm ~/miniconda.sh
 mkdir /root/workspace/
 
 # Clone project source repos
-cd /root/workspace/
-git clone git@github.com:trouleau/var-wold.git  # Add personal lib
+cd /root/workspace/ && git clone git@github.com:trouleau/var-wold.git  # Add personal lib
 
 # Make virtualenv
-conda create -n var-wold python=3.7
-conda activate var-wold
+conda create -n env python=3.7
+conda activate env
 
 cd /root/workspace/var-wold/ && pip install -e .  # Install internal lib
 

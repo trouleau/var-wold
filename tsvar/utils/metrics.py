@@ -82,16 +82,28 @@ def fn(adj_test, adj_true, threshold=0.05):
 
 
 def recall(adj_test, adj_true, threshold=0.05):
-    return tp(adj_test, adj_true, threshold) / np.sum(adj_true > 0)
+    tp_val = tp(adj_test, adj_true, threshold)
+    if tp_val == 0:
+        return tp_val
+    else:
+        tot = np.sum(adj_true > 0)
+        return tp_val / tot
 
 
 def precision(adj_test, adj_true, threshold=0.05):
-    return tp(adj_test, adj_true, threshold) / np.sum(adj_test > threshold)
+    tp_val = tp(adj_test, adj_true, threshold)
+    if tp_val == 0:
+        return tp_val
+    else:
+        tot = np.sum(adj_test > threshold)
+        return tp_val / tot
 
 
 def fscore(adj_test, adj_true, threshold=0.05, beta=1.0):
     rec_val = recall(adj_test, adj_true, threshold)
     prec_val = precision(adj_test, adj_true, threshold)
+    if (rec_val == 0) and (prec_val == 0):
+        return 0.0
     return (1 + beta ** 2) * prec_val * rec_val / (beta ** 2 * prec_val + rec_val)
 
 

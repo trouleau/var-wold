@@ -15,9 +15,11 @@ np.set_printoptions(precision=2, floatmode='fixed', sign=' ')
 
 MLE_N_ITER = 20000
 BBVI_N_ITER = 20000
+
 VI_FB_N_ITER = 3000
 VI_N_ITER = 3000
-GB_N_ITER = 300
+
+GB_N_ITER = 3000
 
 VI_TOL = 1e-4
 

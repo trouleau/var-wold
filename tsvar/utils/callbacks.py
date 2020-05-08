@@ -61,7 +61,7 @@ class LearnerCallbackMLE:
             self.link_func = link_func
             # Init history (with ground truth metrics)
             self.history = History(field_names=(
-                'coeffs',
+                #'coeffs',
                 # 'loss',
                 'iter', 'time',
                 'accuracy', 'f1score', 'relerr'))
@@ -70,7 +70,7 @@ class LearnerCallbackMLE:
             self.has_ground_truth = False
             # Init history (without ground truth metrics)
             self.history = History(field_names=(
-                'coeffs',
+                #'coeffs',
                 # 'loss',
                 'iter', 'time'))
 
@@ -122,14 +122,14 @@ class LearnerCallbackMLE:
                 message += f" | acc: {acc:.2f} | f1-score: {f1score:.2f} | relerr: {relerr:.2f}"
                 # Add to history
                 self.history.append(
-                    coeffs=coeffs.tolist(),
+                    # coeffs=coeffs.tolist(),
                     # loss=loss,
                     iter=t, time=time_diff,
                     accuracy=acc, f1score=f1score, relerr=relerr)
             else:
                 # Add to history
                 self.history.append(
-                    coeffs=coeffs.tolist(),
+                    # coeffs=coeffs.tolist(),
                     # loss=loss,
                     iter=t, time=time_diff)
 
@@ -148,6 +148,7 @@ class LearnerCallbackMLE:
         # NOTE: history must have enough elements for averaging
         if len(self.history) >= max(2, n):
             val = np.mean(np.abs(np.diff(self.history[metric][-n:])))
+            # print('-->', val)
             if val < threhshold:
                 return True
         return False

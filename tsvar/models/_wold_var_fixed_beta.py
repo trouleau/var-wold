@@ -1,33 +1,50 @@
+import math
 import numba
 import numpy as np
-from scipy.special import digamma
 
 from . import WoldModel
 from ..utils.decorators import enforce_observed
 from ..fitter import FitterIterativeNumpy
 
+PARALLEL = False
 
-@numba.jit(nopython=True)
+
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL)
+def digamma(arr, eps=1e-8):
+    """Digamma function (arr is assumed to be 1 or 2 dimensional)"""
+    lgamma_prime = np.zeros_like(arr)
+    if arr.ndim == 1:
+        for i in numba.prange(arr.shape[0]):
+            lgamma_prime[i] = (math.lgamma(arr[i] + eps) - math.lgamma(arr[i])) / eps
+    elif arr.ndim == 2:
+        for j in numba.prange(arr.shape[0]):
+            for i in numba.prange(arr.shape[1]):
+                lgamma_prime[j, i] = (math.lgamma(arr[j, i] + eps) - math.lgamma(arr[j, i])) / eps
+    return lgamma_prime
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL)
 def _update_alpha(as_pr, ar_pr, zp_po, D_ikj):
     dim = as_pr.shape[1]
     as_po = np.zeros_like(as_pr)  # Alpha posterior shape, to return
     ar_po = np.zeros_like(as_pr)  # Alpha posterior rate, to return
-    for i in range(dim):
+    for i in numba.prange(dim):
         as_po[:, i] = (as_pr[:, i] + zp_po[i].sum(axis=0))
         ar_po[:, i] = (ar_pr[:, i] + D_ikj[i].sum(axis=0))
     return as_po, ar_po
 
 
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL)
 def _update_z(as_po, ar_po, D_ikj):
     dim = len(D_ikj)
     zp = list()
-    for i in range(dim):
-        epi = (digamma(as_po[np.newaxis, :, i])
-               - np.log(ar_po[np.newaxis, :, i])
+    for i in numba.prange(dim):
+        epi = (np.expand_dims(digamma(as_po[:, i]), 0)
+               - np.expand_dims(np.log(ar_po[:, i]), 0)
                + np.log(D_ikj[i] + 1e-10))
         # epi -= np.max(epi, axis=1)[:, np.newaxis]
         epi = np.exp(epi)
-        epi /= epi.sum(axis=1)[:, np.newaxis]
+        epi /= np.expand_dims(epi.sum(axis=1), 1)
         zp.append(epi)
     return zp
 

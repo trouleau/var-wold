@@ -107,14 +107,23 @@ def nrmse(adj_test, adj_true):
     return np.sqrt(np.sum((adj_test - adj_true) ** 2)) / np.sum(adj_true ** 2)
 
 
-def relerr(adj_test, adj_true):
+def relerr(adj_test, adj_true, norm=True, null_norm='min'):
     mask = adj_true > 0
     n_nodes = adj_true.shape[0]
     try:
-        rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum() / adj_true[mask].min()
-        # rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum()
-        # rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask])
-        # rel_err = np.sum(np.abs(adj_test - adj_true))
+        if norm:
+            if null_norm == 'min':
+                rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum() / adj_true[mask].min()
+            elif null_norm == 'none':
+                rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum()
+            elif null_norm == 'ignore':
+                rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask])
+            elif isinstance(null_norm, float):
+                rel_err = np.sum(np.abs(adj_test - adj_true)[mask] / adj_true[mask]) + np.abs(adj_test - adj_true)[~mask].sum() / null_norm
+            else:
+                raise ValueError('Invalid norm')
+        else:
+            rel_err = np.sum(np.abs(adj_test - adj_true))
     except Exception:
         rel_err = np.nan
     return rel_err / n_nodes

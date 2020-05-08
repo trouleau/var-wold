@@ -61,16 +61,17 @@ class LearnerCallbackMLE:
             self.link_func = link_func
             # Init history (with ground truth metrics)
             self.history = History(field_names=(
-                #'coeffs',
+                # 'coeffs',
                 # 'loss',
                 'iter', 'time',
-                'accuracy', 'f1score', 'relerr'))
+                # 'accuracy',
+                'f1score', 'relerr'))
 
         else:  # If ground truth is **not** provided
             self.has_ground_truth = False
             # Init history (without ground truth metrics)
             self.history = History(field_names=(
-                #'coeffs',
+                # 'coeffs',
                 # 'loss',
                 'iter', 'time'))
 
@@ -111,21 +112,26 @@ class LearnerCallbackMLE:
                 message += f" | loss: {loss:.4e} | dloss: {loss_diff:+.2e}"
             # ground truth widget
             if self.has_ground_truth:
-                acc = metrics.accuracy(adj_test=coeffs[-self.dim**2:],
-                                       adj_true=self.coeffs_true[-self.dim**2:],
-                                       threshold=self.acc_thresh)
+                # acc = metrics.accuracy(adj_test=coeffs[-self.dim**2:],
+                #                        adj_true=self.coeffs_true[-self.dim**2:],
+                #                        threshold=self.acc_thresh)
                 f1score = metrics.fscore(adj_test=coeffs[-self.dim**2:],
                                          adj_true=self.coeffs_true[-self.dim**2:],
                                          threshold=self.acc_thresh)
                 relerr = metrics.relerr(adj_test=coeffs[-self.dim**2:],
                                         adj_true=self.coeffs_true[-self.dim**2:])
-                message += f" | acc: {acc:.2f} | f1-score: {f1score:.2f} | relerr: {relerr:.2f}"
+                message += (
+                    # f" | acc: {acc:.2f}"
+                    f" | f1-score: {f1score:.2f}"
+                    f" | relerr: {relerr:.2e}"
+                )
                 # Add to history
                 self.history.append(
                     # coeffs=coeffs.tolist(),
                     # loss=loss,
                     iter=t, time=time_diff,
-                    accuracy=acc, f1score=f1score, relerr=relerr)
+                    # accuracy=acc,
+                    f1score=f1score, relerr=relerr)
             else:
                 # Add to history
                 self.history.append(
@@ -135,6 +141,7 @@ class LearnerCallbackMLE:
 
             # runtime widget
             message += f" | time/it: {time_diff:.2e}"
+
             # print message
             print(message + " "*5, end=end or self.default_end, flush=True)
             # Update last vars

@@ -27,7 +27,7 @@ CALLBACK_END = '\n'
 
 
 def generate_parameters(dim, p=None, seed=None, base_range=[1e-4, 0.05],
-                        adj_range=[0.1, 2.0], beta_range=[0.0, 1.0]):
+                        adj_range=[0.1, 0.2], beta_range=[0.0, 1.0]):
     """Generate a random set of parameters for a simulation.
 
     Parameters:

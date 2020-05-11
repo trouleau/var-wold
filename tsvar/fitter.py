@@ -167,11 +167,11 @@ class FitterSGD(Fitter):
             #     return True
 
             if (t+1) % 100 == 0:
-                # Check convergence in callback (if available)
-                if hasattr(callback, 'has_converged'):
-                    if callback.has_converged(n=10):
-                        callback(self, end='\n')  # Callback before the end
-                        return True
+                # # Check convergence in callback (if available)
+                # if hasattr(callback, 'has_converged'):
+                #     if callback.has_converged(n=10):
+                #         callback(self, end='\n')  # Callback before the end
+                #         return True
                 # Or, check convergence in fitter, and then callback
                 if self._check_convergence(tol):
                     callback(self, end='\n')  # Callback before the end

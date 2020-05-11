@@ -18,7 +18,7 @@ from experiments_utils import (generate_data, run_mle, run_bbvi,
 torch.set_num_threads(1)
 
 
-def run_single_job(param_fname, out_fname, sim_idx, stdout=None, stderr=None):
+def run_single_job(param_fname, out_fname, sim_idx, algo_filter, stdout=None, stderr=None):
 
     # Log in main std before redirecting
     job_args = (param_fname, out_fname, sim_idx)
@@ -49,38 +49,43 @@ def run_single_job(param_fname, out_fname, sim_idx, stdout=None, stderr=None):
 
     res_dict = {}
 
-    print()
-    print('Run MLE')
-    print('-------')
-    res_dict['mle'] = run_mle(events, end_time, param_dict, seed=sim_seed)
-    print()
-    print('-'*80, flush=True)
+    if 'mle' in algo_filter:
+        print()
+        print('Run MLE')
+        print('-------')
+        res_dict['mle'] = run_mle(events, end_time, param_dict, seed=sim_seed)
+        print()
+        print('-'*80, flush=True)
 
-    print()
-    print('Run BBVI')
-    print('--------')
-    res_dict['bbvi'] = run_bbvi(events, end_time, param_dict, seed=sim_seed)
-    print()
-    print('-'*80, flush=True)
+    if 'bbvi' in algo_filter:
+        print()
+        print('Run BBVI')
+        print('--------')
+        res_dict['bbvi'] = run_bbvi(events, end_time, param_dict, seed=sim_seed)
+        print()
+        print('-'*80, flush=True)
 
-    print()
-    print('Run VI Beta-Fixed')
-    print('-----------------')
-    res_dict['vi-fixed-beta'] = run_vi_fixed_beta(events, end_time, param_dict, seed=sim_seed)
-    print()
-    print('-'*80, flush=True)
+    if 'vifb' in algo_filter:
+        print()
+        print('Run VI Beta-Fixed')
+        print('-----------------')
+        res_dict['vi-fixed-beta'] = run_vi_fixed_beta(events, end_time, param_dict, seed=sim_seed)
+        print()
+        print('-'*80, flush=True)
 
-    print()
-    print('Run VI With-Beta')
-    print('----------------')
-    res_dict['vi'] = run_vi(events, end_time, param_dict, seed=sim_seed)
-    print()
-    print('-'*80, flush=True)
+    if 'vi' in algo_filter:
+        print()
+        print('Run VI')
+        print('------')
+        res_dict['vi'] = run_vi(events, end_time, param_dict, seed=sim_seed)
+        print()
+        print('-'*80, flush=True)
 
-    print()
-    print('Run GrangerBusca')
-    print('----------------')
-    res_dict['gb'] = run_gb(events, end_time, param_dict, seed=sim_seed)
+    if 'gb' in algo_filter:
+        print()
+        print('Run GrangerBusca')
+        print('----------------')
+        res_dict['gb'] = run_gb(events, end_time, param_dict, seed=sim_seed)
 
     with open(out_fname, 'w') as out_f:
         json.dump(res_dict, out_f)
@@ -100,8 +105,12 @@ if __name__ == "__main__":
                         required=True, help="Number of simulatins per sub-exp")
     parser.add_argument('--no-std-redirect', dest='no_std_redirect',
                         action="store_true", help="Do not redirect stdout/stderr")
+    parser.add_argument('--filter-algo', nargs='+', dest='algo_filter', type=str,
+                        required=False, help='Filter algorithms to work with')
 
     args = parser.parse_args()
+
+    print(args.algo_filter)
 
     # Pattern to extract list of parameter files
     search_pattern = os.path.join(args.exp_dir, '*', 'params.json')
@@ -126,7 +135,7 @@ if __name__ == "__main__":
                 stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}')
             # Add tuple of arguments to list
             pool_args.append(
-                (param_fname, out_fname, sim_idx, stdout, stderr))
+                (param_fname, out_fname, sim_idx, args.algo_filter, stdout, stderr))
 
     # # Reverse list of args (will be popped from last element)
     # pool_args = pool_args[::-1]

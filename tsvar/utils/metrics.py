@@ -41,6 +41,29 @@ def precision_at_n(adj_test, adj_true, n):
     return np.sum(adj_true[sorted_args][:n] > 0) / n
 
 
+def precision_at_n_per_dim(A_pred, A_true, k=10):
+    res = 0.0
+    tmp = 0
+    for i in range(A_true.shape[0]):
+        x = A_true[i]
+        x = x[x != 0]
+
+        y = A_pred[i]
+        y = y[y != 0]
+
+        kx = min(len(x), k)
+        ky = min(len(y), k)
+        if ky == 0 or kx == 0:
+            continue
+        x = set(np.argpartition(x, -kx)[-kx:])
+        y = set(np.argpartition(y, -ky)[-ky:])
+        res += len(x.intersection(y)) / k
+        tmp += 1
+    if tmp == 0:
+        return 0
+    return res / tmp
+
+
 def true_positive(adj_test, adj_true, threshold=0.05):
     assert (len(adj_test.shape) == 1) and (len(adj_true.shape) == 1), \
      "Parameters should be one-dimensional"

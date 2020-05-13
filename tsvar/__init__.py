@@ -4,3 +4,4 @@ from . import utils
 from . import simulate
 from . import fitter
 from . import plotting
+from . import preprocessing

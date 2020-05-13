@@ -46,10 +46,16 @@ class History:
 class LearnerCallbackMLE:
 
     def __init__(self, x0, print_every=10, coeffs_true=None, acc_thresh=None,
-                 dim=None, link_func=None, default_end=""):
+                 dim=None, link_func=None, default_end="", widgets=None):
         self.print_every = print_every
         self.default_end = default_end
         self.n_params = len(x0)
+
+        if widgets is not None:
+            self.widgets = widgets
+        else:
+            self.widgets = {'acc', 'f1score', 'relerr',
+                            'prec@5', 'prec@10', 'prec@20'}
 
         if coeffs_true is not None:  # If ground truth is provided
             self.has_ground_truth = True
@@ -112,19 +118,41 @@ class LearnerCallbackMLE:
                 message += f" | loss: {loss:.4e} | dloss: {loss_diff:+.2e}"
             # ground truth widget
             if self.has_ground_truth:
-                # acc = metrics.accuracy(adj_test=coeffs[-self.dim**2:],
-                #                        adj_true=self.coeffs_true[-self.dim**2:],
-                #                        threshold=self.acc_thresh)
-                f1score = metrics.fscore(adj_test=coeffs[-self.dim**2:],
-                                         adj_true=self.coeffs_true[-self.dim**2:],
-                                         threshold=self.acc_thresh)
-                relerr = metrics.relerr(adj_test=coeffs[-self.dim**2:],
-                                        adj_true=self.coeffs_true[-self.dim**2:])
-                message += (
-                    # f" | acc: {acc:.2f}"
-                    f" | f1-score: {f1score:.2f}"
-                    f" | relerr: {relerr:.2e}"
-                )
+                if 'acc' in self.widgets:
+                    acc = metrics.accuracy(adj_test=coeffs[-self.dim**2:],
+                                           adj_true=self.coeffs_true[-self.dim**2:],
+                                           threshold=self.acc_thresh)
+                    message += f" | acc: {acc:.2f}"
+
+                if 'f1score' in self.widgets:
+                    f1score = metrics.fscore(adj_test=coeffs[-self.dim**2:],
+                                             adj_true=self.coeffs_true[-self.dim**2:],
+                                             threshold=self.acc_thresh)
+                    message += f" | f1-score: {f1score:.2f}"
+
+                if 'relerr' in self.widgets:
+                    relerr = metrics.relerr(adj_test=coeffs[-self.dim**2:],
+                                            adj_true=self.coeffs_true[-self.dim**2:])
+                    message += f" | relerr: {relerr:.2e}"
+
+                if 'prec@5' in self.widgets:
+                    precAt5 = metrics.precision_at_n(adj_test=coeffs[-self.dim**2:],
+                                                     adj_true=self.coeffs_true[-self.dim**2:],
+                                                     n=5)
+                    message += f" | p@5: {precAt5:.2f}"
+
+                if 'prec@10' in self.widgets:
+                    precAt10 = metrics.precision_at_n(adj_test=coeffs[-self.dim**2:],
+                                                      adj_true=self.coeffs_true[-self.dim**2:],
+                                                      n=10)
+                    message += f" | p@10: {precAt10:.2f}"
+
+                if 'prec@20' in self.widgets:
+                    precAt20 = metrics.precision_at_n(adj_test=coeffs[-self.dim**2:],
+                                                      adj_true=self.coeffs_true[-self.dim**2:],
+                                                      n=20)
+                    message += f" | p@20: {precAt20:.2f}"
+
                 # Add to history
                 self.history.append(
                     # coeffs=coeffs.tolist(),

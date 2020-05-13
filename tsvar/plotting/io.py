@@ -38,6 +38,7 @@ def _process_mle(data):
     series = pd.Series(data['coeffs']).apply(np.array)
     series['conv'] = data['conv']
     series['history'] = data['history']
+    series['num_iter'] = data['history']['iter'][-1]
     # Add prefix
     series = series.rename({col: 'mle_' + col for col in series.index})
     return series
@@ -94,7 +95,7 @@ def _process_gb(data):
     series['conv'] = data['conv']
     series['history'] = data['history']
     # Extract normalized adjacency
-    series['adj_normed'] = series['adjacency'] / series['adjacency'].sum(axis=1)
+    series['adj_normed'] = series['adjacency'] / series['adjacency'].sum(axis=1)[:, None]
     # Add prefix
     series = series.rename({col: 'gb_' + col for col in series.index})
     return series

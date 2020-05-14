@@ -22,8 +22,8 @@ def load_dataset(input_path, top):
     print('Dataset:')
     print('========')
     print()
-    print(f"Input file: {args.input_path}")
-    print(f"Top: {args.top:d}")
+    print(f"Input file: {input_path}")
+    print(f"Top: {top:d}")
 
     dataset = Dataset(input_path, top=top, timescale='median')
 
@@ -48,7 +48,7 @@ def load_dataset(input_path, top):
     return dataset
 
 
-def run_single_job(dataset, out_fname, algo_filter, prior_dict):
+def run_inference(dataset, out_fname, algo_filter, prior_dict):
 
     events = dataset.timestamps
     end_time = dataset.end_time
@@ -115,6 +115,34 @@ def run_single_job(dataset, out_fname, algo_filter, prior_dict):
     print('Job Finished', flush=True)
 
 
+def run_single_job(args, name_suffix=None):
+    # Build output filename
+    input_fname = os.path.splitext(os.path.splitext(os.path.split(args.input_path)[1])[0])[0]
+    exp_name = f"output-{input_fname}-top{args.top:d}"
+    if name_suffix:
+        exp_name += f"-{name_suffix}"
+    output_fname = os.path.join(args.output_path, f"{exp_name}.json")
+
+    # Build stdout/stderr filenames
+    if not args.no_std_redirect:
+        stdout = os.path.join(args.output_path, f'stdout-{exp_name}')
+        stderr = os.path.join(args.output_path, f'stderr-{exp_name}')
+        sys.stdout = open(stdout, 'w')
+        sys.stderr = open(stderr, 'w')
+
+    # Build prior dict
+    prior_dict = {
+        'as_pr': args.as_pr,
+        'ar_pr': args.ar_pr
+    }
+
+    # Load dataset
+    dataset = load_dataset(input_path=args.input_path, top=args.top)
+
+    # Run inference
+    run_inference(dataset, output_fname, args.algo_filter, prior_dict)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--fp', dest='input_path', type=str,
@@ -135,26 +163,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Build output filename
-    input_fname = os.path.splitext(os.path.splitext(os.path.split(args.input_path)[1])[0])[0]
-    exp_name = f"output-{input_fname}-top{args.top:d}"
-    output_fname = os.path.join(args.output_path, f"{exp_name}.json")
-
-    # Build stdout/stderr filenames
-    if not args.no_std_redirect:
-        stdout = os.path.join(args.output_path, f'stdout-{exp_name}')
-        stderr = os.path.join(args.output_path, f'stderr-{exp_name}')
-        sys.stdout = open(stdout, 'w')
-        sys.stderr = open(stderr, 'w')
-
-    # Build prior dict
-    prior_dict = {
-        'as_pr': args.as_pr,
-        'ar_pr': args.ar_pr
-    }
-
-    # Load dataset
-    dataset = load_dataset(input_path=args.input_path, top=args.top)
-
-    # Run inference
-    run_single_job(dataset, output_fname, args.algo_filter, prior_dict)
+    run_single_job(args)

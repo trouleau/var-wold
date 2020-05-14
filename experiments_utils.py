@@ -236,7 +236,7 @@ def run_bbvi(events, end_time, coeffs_true_dict, seed):
     return res_dict
 
 
-def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed):
+def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed, prior_dict=None):
     dim = len(events)
     # Extract ground truth
     coeffs_true = np.hstack((coeffs_true_dict['baseline'],
@@ -245,8 +245,10 @@ def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed):
     model = tsvar.models.WoldModelVariationalFixedBeta(verbose=True)
     model.observe(events, beta=coeffs_true_dict['beta'])
     # Set priors
-    as_pr = 0.1 * np.ones((dim + 1, dim))
-    ar_pr = 1.0 * np.ones((dim + 1, dim))
+    if prior_dict is None:
+        prior_dict = {'as_pr': 0.1, 'ar_pr': 1.0}
+    as_pr = prior_dict['as_pr'] * np.ones((dim + 1, dim))
+    ar_pr = prior_dict['ar_pr'] * np.ones((dim + 1, dim))
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(

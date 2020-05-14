@@ -107,10 +107,7 @@ if __name__ == "__main__":
                         action="store_true", help="Do not redirect stdout/stderr")
     parser.add_argument('--filter-algo', nargs='+', dest='algo_filter', type=str,
                         required=False, help='Filter algorithms to work with')
-
     args = parser.parse_args()
-
-    print(args.algo_filter)
 
     # Pattern to extract list of parameter files
     search_pattern = os.path.join(args.exp_dir, '*', 'params.json')

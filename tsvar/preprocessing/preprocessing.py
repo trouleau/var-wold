@@ -1,8 +1,12 @@
 from collections import defaultdict
+from math import exp
 import gzip
 import pickle
-import pandas as pd
 import numpy as np
+import networkx as nx
+
+
+import tsvar
 
 
 def get_graph_stamps(path, top=None):
@@ -86,21 +90,52 @@ def get_graph_stamps(path, top=None):
 
 class Dataset:
 
-    def __init__(self, path, top=None):
-        self._from_raw_gz(path, top)
+    def __init__(self, path, top=None, timescale='median', verbose=False):
+        self._from_raw_gz(path, top, timescale, verbose)
 
-    def _from_raw_gz(self, path, top):
+    def _from_raw_gz(self, path, top, timescale, verbose):
+        # Build point process from raw file (using same preprocessing as in
+        #   https://github.com/flaviovdf/granger-busca/
         # Find the valid top entities
         valid = self._find_valid_entities(path, top)
-        # Build point process from raw file
+        # Extract timestamps and ground truth adjacency graph
         timestamps, sources, graph, ids = self._build_point_process(path, valid)
 
-        # Set sparse adjacency matrix attribute
-        self.graph = self._build_graph_with_indices(graph, ids)
-
         # Set point process attributes
-        self.timestamps = [np.array(sorted(ev)) for ev in timestamps]
-        self.sources = sources
+        self.timestamps = list(map(np.array, timestamps))
+        self.sources = list(map(np.array, sources))
+        # Delete the original objects to avoid bugs
+        del timestamps
+        del sources
+
+        # Process the timestamps
+        sargs = list(map(np.argsort, self.timestamps))  # argsort timestamps
+        # Sort the timestamps
+        self.timestamps = [ev[s] for ev, s in zip(self.timestamps, sargs)]
+        # Sort the ground truth causal source of each event
+        self.sources = [ev[s] for ev, s in zip(self.sources, sargs)]
+
+        # Set dimension attribute
+        self.dim = len(self.timestamps)
+
+        # Rescale time
+        busca_beta_ji = None
+        if timescale == 'median':
+            timescale, busca_beta_ji = self._compute_median_timescale(self.timestamps)
+        elif not (isinstance(timescale, (int, float)) and (timescale > 0)):
+            raise ValueError('`timescale should be a positive number`')
+        self.timestamps = [ev / timescale for ev in self.timestamps]
+
+        # Set end time attribute
+        self.end_time = max(map(max, self.timestamps))
+
+        # Compute the Busca estimators of beta_ji (if not already done with timescale)
+        self.busca_beta_ji = busca_beta_ji if (busca_beta_ji is not None) else self._compute_busca_beta_ji(self.timestamps)
+
+        # Set sparse adjacency matrix attribute
+        graph = self._build_graph_with_indices(graph, ids)
+        self.graph = nx.DiGraph(graph)
+        assert self.graph.number_of_nodes() == self.dim, "Something went wrong with ground truth graph"
 
         # Set name <-> idx mapping attributes
         self.name_to_idx = ids
@@ -113,6 +148,33 @@ class Dataset:
     def from_pickle(cls, path):
         with open(path, 'rb') as f:
             return pickle.load(f)
+
+    def _compute_median_timescale(self, timestamps, return_busca_betas=True):
+        """Compute the time scale leading to unit median inter-arrival time"""
+        # Compute the inter-arrival times
+        wmod = tsvar.models.WoldModel()
+        wmod.observe(timestamps)
+        median_delta = np.median(np.hstack(map(np.ravel, wmod.delta_ikj)))
+        # Busca estimator for beta in Wold processes
+        scale = median_delta / exp(1)
+
+        if return_busca_betas:
+            busca_beta_ji = self._compute_busca_beta_ji(timestamps, wmod)
+            busca_beta_ji /= scale
+            return scale, busca_beta_ji
+
+        return scale
+
+    def _compute_busca_beta_ji(self, timestamps, wmod=None):
+        if wmod is None:
+            # Init WoldModel to get inter-arrival time deltas
+            wmod = tsvar.models.WoldModel()
+            wmod.observe(timestamps)
+        # Compute the busca estimaotr of beta_ji
+        busca_beta_ji = np.zeros((wmod.dim, wmod.dim))
+        for i in range(wmod.dim):
+            busca_beta_ji[:, i] = np.median(wmod.delta_ikj[i], axis=0) / exp(1)
+        return busca_beta_ji
 
     def _find_valid_entities(self, path, top):
         count = defaultdict(int)  # Count number of events in dst

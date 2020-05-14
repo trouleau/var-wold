@@ -181,15 +181,13 @@ class WoldModel(Model):
         computations of inter-arrival time for future log-likelihood calls.
         """
         super().observe(events, end_time)
+
         #
         # TODO: Observed events, add a virtual event at `end_time` for easier
         # log-likelihood computation. Remove the virtual event, it's nasty and
         # will eventually introduce bugs.
-        self.events = []
         for i in range(self.dim):
-            self.events.append(torch.cat((
-                events[i], torch.tensor([self.end_time], dtype=torch.float,
-                                        device=self.device))))
+            self.events[i] = torch.cat((self.events[i], torch.tensor([self.end_time], dtype=torch.float, device=self.device)))
         self.n_jumps = list(map(len, self.events))
         #
         # Number of parameters of the model

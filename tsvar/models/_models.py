@@ -30,7 +30,8 @@ class Model(metaclass=abc.ABCMeta):
         Child class must set attribute `n_params`
         """
         # Events must be tensor to use torch's automatic differentiation
-        assert isinstance(events, list) and isinstance(events[0], torch.Tensor), "`events` should be a list of `torch.Tensor`."
+        if not (isinstance(events, list) and isinstance(events[0], torch.Tensor)):
+            events = [torch.tensor(ev, dtype=torch.float) for ev in events]
         # Move the tensors to GPU if available
         self.events = [num.to(self.device) for num in events]
         self.end_time = end_time or max([max(num) for num in events if len(num) > 0])

@@ -29,7 +29,8 @@ CALLBACK_END = '\n'
 
 
 def generate_parameters(dim, p=None, seed=None, base_range=[1e-4, 0.05],
-                        adj_range=[0.1, 0.2], beta_range=[0.0, 1.0]):
+                        adj_range=[0.1, 0.2], beta_range=[0.0, 1.0],
+                        unit_adj_rows=False):
     """Generate a random set of parameters for a simulation.
 
     Parameters:
@@ -46,6 +47,9 @@ def generate_parameters(dim, p=None, seed=None, base_range=[1e-4, 0.05],
         Min-max range of uniform distribution for adjacency values
     beta_range : tuple (optional)
         Min-max range of uniform distribution for beta values
+    unit_adj_rows : bool (optional, default: False)
+        If set to True, then rows of the adjacency matrix are normalized to unit
+        norm to match the constraint of the GrangerBusca model.
     """
     if seed:
         np.random.seed(seed)
@@ -63,13 +67,11 @@ def generate_parameters(dim, p=None, seed=None, base_range=[1e-4, 0.05],
         adjacency = adjacency.astype(float)
         adjacency *= np.random.uniform(*adj_range, size=(dim, dim))
         adjacency = adjacency.round(4)
-        # # Check stability
-        # wold_sim = tsvar.simulate.MultivariateWoldSimulator(
-        #     mu_a=baseline, alpha_ba=adjacency, beta_ba=beta)
-        # if wold_sim.spectral_radius() < 1:
-        #     return {'baseline': baseline.tolist(),
-        #             'beta': beta.tolist(),
-        #             'adjacency': adjacency.tolist()}
+
+        # Normalize row if needed
+        if unit_adj_rows:
+            adjacency = adjacency / adjacency.sum(axis=1)[:, None]
+
         return {'baseline': baseline.tolist(),
                     'beta': beta.tolist(),
                     'adjacency': adjacency.tolist()}
@@ -348,7 +350,7 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
     run_time = time.time() - start_time
     # Extract infered adjacency
     adj_hat = granger_model.Alpha_.toarray()
-    adj_hat = adj_hat / adj_hat.sum(axis=1)
+    adj_hat = adj_hat / adj_hat.sum(axis=1)[:, None]
     beta_hat = np.ones((dim, dim)) * (granger_model.beta_ + 1)
     coeffs_hat = np.hstack((granger_model.mu_, beta_hat.flatten(),
                             adj_hat.flatten()))

@@ -87,8 +87,17 @@ def make_plot_df(df, suf_col_dict, agg_col, threshold=THRESHOLD):
                         suf_col_dict=suf_col_dict, threshold=threshold)
     cols_relerr = make_perf(df, metrics.relerr, prefix='relerr',
                             suf_col_dict=suf_col_dict)
+
+    col_precAt5 = make_perf(df, metrics.precision_at_n, prefix='precAt5',
+                            suf_col_dict=suf_col_dict, n=5)
+    col_precAt10 = make_perf(df, metrics.precision_at_n, prefix='precAt10',
+                             suf_col_dict=suf_col_dict, n=10)
+    col_precAt20 = make_perf(df, metrics.precision_at_n, prefix='precAt20',
+                             suf_col_dict=suf_col_dict, n=20)
+
     # Make plotting df
     required_cols = (cols_acc + cols_relerr + cols_f1score
+                     + col_precAt5 + col_precAt10 + col_precAt20
                      + cols_fp + cols_fn + [agg_col])
     agg_funcs = ['min', 'max', 'mean', 'std', 'count']
     df_plot = df[required_cols].groupby(agg_col).agg(agg_funcs)

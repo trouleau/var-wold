@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 
+
 def edge_error(adj_excit_test, adj_excit_true, delta_t, n_nodes):
     diff_excit = (adj_excit_test - adj_excit_true).abs()
     return diff_excit.sum() * delta_t / n_nodes**2
@@ -26,14 +27,19 @@ def accuracy(adj_test, adj_true, threshold=0.05):
     return (shape - n_err) / shape
 
 
-def mean_kendall_rank_corr(adj_est, adj_true):
+def mean_kendall_rank_corr(adj_est, adj_true, return_vec=False):
     assert (len(adj_est.shape) == 1) and (len(adj_true.shape) == 1), \
          "Parameters should be one-dimensional"
     dim = int(np.sqrt(adj_est.shape[0]))
     adj_est = np.reshape(adj_est, (dim, dim))
     adj_true = np.reshape(adj_true, (dim, dim))
-    return np.mean([scipy.stats.kendalltau(adj_est[:, i], adj_true[:, i]).correlation
+    arr = np.array([scipy.stats.kendalltau(adj_est[:, i], adj_true[:, i]).correlation
                     for i in range(dim)])
+    val = np.mean(arr)
+    if return_vec:
+        return val, arr
+    else:
+        return val
 
 
 def precision_at_n(adj_test, adj_true, n):
@@ -67,25 +73,25 @@ def precision_at_n_per_dim(A_pred, A_true, k=10):
 def true_positive(adj_test, adj_true, threshold=0.05):
     assert (len(adj_test.shape) == 1) and (len(adj_true.shape) == 1), \
      "Parameters should be one-dimensional"
-    return np.sum((adj_test >= threshold) * (adj_true > 0))
+    return np.sum((adj_test > threshold) * (adj_true > 0))
 
 
 def false_positive(adj_test, adj_true, threshold=0.05):
     assert (len(adj_test.shape) == 1) and (len(adj_true.shape) == 1), \
      "Parameters should be one-dimensional"
-    return np.sum((adj_test >= threshold) * (adj_true == 0))
+    return np.sum((adj_test > threshold) * (adj_true == 0))
 
 
 def false_negative(adj_test, adj_true, threshold=0.05):
     assert (len(adj_test.shape) == 1) and (len(adj_true.shape) == 1), \
      "Parameters should be one-dimensional"
-    return np.sum((adj_test < threshold) * (adj_true > 0))
+    return np.sum((adj_test <= threshold) * (adj_true > 0))
 
 
 def true_negative(adj_test, adj_true, threshold=0.05):
     assert (len(adj_test.shape) == 1) and (len(adj_true.shape) == 1), \
      "Parameters should be one-dimensional"
-    return np.sum((adj_test < threshold) * (adj_true == 0))
+    return np.sum((adj_test <= threshold) * (adj_true == 0))
 
 
 def tp(adj_test, adj_true, threshold=0.05):
@@ -120,6 +126,37 @@ def precision(adj_test, adj_true, threshold=0.05):
     else:
         tot = np.sum(adj_test > threshold)
         return tp_val / tot
+
+
+def tpr(adj_test, adj_true, threshold=0.05):
+    return recall(adj_test, adj_true, threshold)
+
+
+def fpr(adj_test, adj_true, threshold=0.05):
+    fp_val = fp(adj_test, adj_true, threshold)
+    if fp_val == 0:
+        return fp_val
+    else:
+        tot = np.sum(adj_true == 0)
+        return fp_val / tot
+
+
+def tnr(adj_test, adj_true, threshold=0.05):
+    tn_val = tn(adj_test, adj_true, threshold)
+    if tn_val == 0:
+        return tn_val
+    else:
+        tot = np.sum(adj_true == 0)
+        return tn_val / tot
+
+
+def fnr(adj_test, adj_true, threshold=0.05):
+    fn_val = fn(adj_test, adj_true, threshold)
+    if fn_val == 0:
+        return fn_val
+    else:
+        tot = np.sum(adj_true > 0)
+        return fn_val / tot
 
 
 def fscore(adj_test, adj_true, threshold=0.05, beta=1.0):

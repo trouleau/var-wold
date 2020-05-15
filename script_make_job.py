@@ -29,7 +29,18 @@ if __name__ == "__main__":
     parser.add_argument('-g', dest='num_graphs', type=int, required=True,
                         help="Number of graphs to generate")
 
+    parser.add_argument('--unit-adj-rows', dest='unit_adj_rows',
+                        action="store_true",
+                        help="Normalize adjacency rows as in GrangerBusca")
+
     args = parser.parse_args()
+
+    print(f'Generate {args.num_graphs} sub-experiments,')
+    print(f'with {args.num_sims} simulation seed each,')
+    print(f'in {args.dim} dimensions with {args.max_jumps} event.')
+    print()
+    print('Unit adjacency rows?', args.unit_adj_rows)
+    print()
 
     # Set timestamps for experiment dir suffix
     exp_suffix = f"{time.time():.0f}"
@@ -47,7 +58,8 @@ if __name__ == "__main__":
         gen_seed = np.random.randint(2**31 - 1)
 
         # Generate parameters
-        param_dict = generate_parameters(dim=args.dim, seed=gen_seed)
+        param_dict = generate_parameters(dim=args.dim, seed=gen_seed,
+                                         unit_adj_rows=args.unit_adj_rows)
 
         # Generate list of seeds for simulations
         sim_seed_list = np.random.randint(2**31 - 1,
@@ -71,6 +83,10 @@ if __name__ == "__main__":
         # Creat sub-exp diretory
         os.mkdir(sub_exp_dir)
 
+        print('-> Save sub-experiment:', sub_exp_name)
+
         # Save parameters
         with open(os.path.join(sub_exp_dir, 'params.json'), 'w') as out_f:
             json.dump(data, out_f)
+
+    print()

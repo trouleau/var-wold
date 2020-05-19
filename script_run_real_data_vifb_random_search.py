@@ -12,17 +12,17 @@ if __name__ == "__main__":
 
     globals()["Arguments"] = Arguments
 
-    INPUT_PATH = 'data/email-Eu-core-temporal.txt.gz'
+    INPUT_PATH = 'data/enron_dataset_splitted_receivers.csv.gz'
     TOP = 100
     OUTPUT_PATH = 'output/real-data/'
-    ALGO_FILTER = ['vifb']
+    ALGO_FILTER = ['vifb', 'gb']
 
     arg_list = list()
 
     for i in range(10):
 
-        as_pr = np.random.uniform(0.01, 20.0)
-        ar_pr = np.random.uniform(0.01, 20.0)
+        as_pr = np.random.uniform(0.01, 50.0)
+        ar_pr = np.random.uniform(0.01, 50.0)
 
         args = Arguments(
             input_path=INPUT_PATH, top=TOP,

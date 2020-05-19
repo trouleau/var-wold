@@ -94,6 +94,12 @@ class Dataset:
         self._from_raw_gz(path, top, timescale, verbose)
 
     def _from_raw_gz(self, path, top, timescale, verbose):
+        """
+        Process a G-zipped csv file of events. Each row is assumed to be
+        formatted as (`sender`, `receiver`, ..., `timestamp`), with possible
+        extra meta-data between the `receiver` and `timestamp` fields.
+        `timestamp` must be the last column.
+        """
         # Build point process from raw file (using same preprocessing as in
         #   https://github.com/flaviovdf/granger-busca/
         # Find the valid top entities

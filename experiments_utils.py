@@ -375,3 +375,63 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
         'time': [run_time/GB_N_ITER]  # runtime per iter (`run_time` is computed outside the iter loop for gb)
     }
     return res_dict
+
+
+def print_report(adj_hat, adj_true, thresh=0.05):
+    adj_hat_flat = adj_hat.flatten()
+    adj_true_flat = adj_true.flatten()
+
+    # Accuracy
+    acc = tsvar.utils.metrics.accuracy(adj_hat_flat, adj_true_flat, threshold=thresh)
+    # Precision/Recall metrics
+    prec = tsvar.utils.metrics.precision(adj_hat_flat, adj_true_flat, threshold=thresh)
+    rec = tsvar.utils.metrics.recall(adj_hat_flat, adj_true_flat, threshold=thresh)
+    fsc = tsvar.utils.metrics.fscore(adj_hat_flat, adj_true_flat, threshold=thresh)
+    precat5 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=5)
+    precat10 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=10)
+    precat20 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=20)
+    # Error counts
+    tp = tsvar.utils.metrics.tp(adj_hat_flat, adj_true_flat, threshold=thresh)
+    fp = tsvar.utils.metrics.fp(adj_hat_flat, adj_true_flat, threshold=thresh)
+    tn = tsvar.utils.metrics.tn(adj_hat_flat, adj_true_flat, threshold=thresh)
+    fn = tsvar.utils.metrics.fn(adj_hat_flat, adj_true_flat, threshold=thresh)
+    # Error rates
+    tpr = tsvar.utils.metrics.tpr(adj_hat_flat, adj_true_flat, threshold=thresh)
+    fpr = tsvar.utils.metrics.fpr(adj_hat_flat, adj_true_flat, threshold=thresh)
+    tnr = tsvar.utils.metrics.tnr(adj_hat_flat, adj_true_flat, threshold=thresh)
+    fnr = tsvar.utils.metrics.fnr(adj_hat_flat, adj_true_flat, threshold=thresh)
+
+    print(f"Accuracy: {acc:.2f}")
+    print()
+    print('Error counts')
+    print('------------')
+    print(f" True Positive: {tp:.2f}")
+    print(f"False Positive: {fp:.2f}")
+    print(f" True Negative: {tn:.2f}")
+    print(f"False Negative: {fn:.2f}")
+    print()
+    print('Error rates')
+    print('-----------')
+    print(f" True Positive Rate: {tpr:.2f}")
+    print(f"False Positive Rate: {fpr:.2f}")
+    print(f" True Negative Rate: {tnr:.2f}")
+    print(f"False Negative Rate: {fnr:.2f}")
+    print()
+    print('F-Score')
+    print('-------')
+    print(f" F1-Score: {fsc:.2f}")
+    print(f"Precision: {prec:.2f}")
+    print(f"   Recall: {rec:.2f}")
+    print()
+    print('Precision@k')
+    print('-----------')
+    print(f" Prec@5: {precat5:.2f}")
+    print(f"Prec@10: {precat10:.2f}")
+    print(f"Prec@20: {precat20:.2f}")
+    print()
+    print('Average Precision@k per node')
+    print('----------------------------')
+    print('AvgPrec@k per node:')
+    for k in [5, 10, 20]:
+        print(k, tsvar.utils.metrics.precision_at_n_per_dim(A_pred=adj_hat, A_true=adj_true, k=k))
+    print(flush=True)

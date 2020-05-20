@@ -8,13 +8,15 @@ import os
 
 import torch
 
-import tsvar
 from tsvar.preprocessing import Dataset
-from experiments_utils import (run_mle, run_bbvi, run_vi_fixed_beta, run_vi, run_gb)
+from experiments_utils import (run_mle, run_bbvi, run_vi_fixed_beta, run_vi, run_gb, print_report)
 
 
 # Set torch parallel threads to 1 to allow for multiple parallel jobs to run
 torch.set_num_threads(24)
+
+# Threshold for reports
+THRESH = 0.05
 
 
 def load_dataset(input_path, top):
@@ -93,52 +95,25 @@ def run_inference(dataset, out_fname, algo_filter, prior_dict):
         res_dict['vi-fixed-beta'] = run_vi_fixed_beta(
             events, end_time, param_dict, seed=sim_seed, prior_dict=prior_dict)
         print()
-        print('-'*80, flush=True)
 
         as_po = np.array(res_dict['vi-fixed-beta']['coeffs']['as_po'])
         ar_po = np.array(res_dict['vi-fixed-beta']['coeffs']['ar_po'])
         adj_hat = as_po[1:, :] / ar_po[1:, :]
-        # adj_hat = adj_hat / param_dict['beta']
-
-        THRESH = 0.05
-
-        acc = tsvar.utils.metrics.accuracy(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(),
-            threshold=THRESH)
-        prec = tsvar.utils.metrics.precision(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(),
-            threshold=THRESH)
-        rec = tsvar.utils.metrics.recall(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(),
-            threshold=THRESH)
-        fsc = tsvar.utils.metrics.fscore(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(),
-            threshold=THRESH)
-        precat5 = tsvar.utils.metrics.precision_at_n(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(), n=5)
-        precat10 = tsvar.utils.metrics.precision_at_n(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(), n=10)
-        precat20 = tsvar.utils.metrics.precision_at_n(
-            adj_test=adj_hat.flatten(), adj_true=param_dict['adjacency'].flatten(), n=20)
-
-        print(f"Accuracy: {acc:.2f}")
-        print(f"F1-Score: {fsc:.2f}")
-        print(f"Precision: {prec:.2f}")
-        print(f"Recall: {rec:.2f}")
-        print(f"Prec@5: {precat5:.2f}")
-        print(f"Prec@10: {precat10:.2f}")
-        print(f"Prec@20: {precat20:.2f}")
-
-        print('Prec@k per node:')
-        for k in [5, 10, 20]:
-            print(k, tsvar.utils.metrics.precision_at_n_per_dim(
-                A_pred=adj_hat, A_true=param_dict['adjacency'], k=k))
+        print_report(adj_hat=adj_hat, adj_true=param_dict['adjacency'], thresh=THRESH)
+        print()
+        print('-'*80, flush=True)
 
     if 'vi' in algo_filter:
         print()
         print('Run VI')
         print('------')
         res_dict['vi'] = run_vi(events, end_time, param_dict, seed=sim_seed)
+        print()
+
+        as_po = np.array(res_dict['vi-fixed-beta']['coeffs']['as_po'])
+        ar_po = np.array(res_dict['vi-fixed-beta']['coeffs']['ar_po'])
+        adj_hat = as_po[1:, :] / ar_po[1:, :]
+        print_report(adj_hat=adj_hat, adj_true=param_dict['adjacency'], thresh=THRESH)
         print()
         print('-'*80, flush=True)
 
@@ -148,6 +123,13 @@ def run_inference(dataset, out_fname, algo_filter, prior_dict):
         print('----------------')
         res_dict['gb'] = run_gb(events, end_time, param_dict, seed=sim_seed)
 
+        adj_hat = np.array(res_dict['gb']['adjacency'])
+        adj_hat = adj_hat / adj_hat.sum(axis=1)[:, None]
+        print_report(adj_hat=adj_hat, adj_true=param_dict['adjacency'], thresh=THRESH)
+        print()
+        print('-'*80, flush=True)
+
+    # Save all results
     with open(out_fname, 'w') as out_f:
         json.dump(res_dict, out_f)
 

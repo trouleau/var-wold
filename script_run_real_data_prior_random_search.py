@@ -15,7 +15,7 @@ if __name__ == "__main__":
     INPUT_PATH = 'data/enron_dataset_splitted_receivers.csv.gz'
     TOP = 100
     OUTPUT_PATH = 'output/real-data/'
-    ALGO_FILTER = ['vifb', 'gb']
+    ALGO_FILTER = ['vi', 'vifb', 'gb']
 
     arg_list = list()
 

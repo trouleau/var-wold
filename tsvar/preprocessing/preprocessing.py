@@ -131,6 +131,7 @@ class Dataset:
         elif not (isinstance(timescale, (int, float)) and (timescale > 0)):
             raise ValueError('`timescale should be a positive number`')
         self.timestamps = [ev / timescale for ev in self.timestamps]
+        self.time_scale = timescale
 
         # Set end time attribute
         self.end_time = max(map(max, self.timestamps))

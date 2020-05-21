@@ -195,7 +195,7 @@ def run_bbvi(events, end_time, coeffs_true_dict, seed):
         coeffs = torch.tensor(coeffs) if isinstance(coeffs, np.ndarray) else coeffs
         return model.posterior.mode(
             coeffs[:model.n_params], coeffs[model.n_params:]
-        ).detach().numpy()[dim+dim**2:]
+        ).detach().numpy()[-dim**2:]
     # Set the callback (callback parameters are posterior mode)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
         x0=posterior().mode(
@@ -377,7 +377,7 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
     return res_dict
 
 
-def print_report(adj_hat, adj_true, thresh=0.05):
+def print_report(name, adj_hat, adj_true, thresh=0.05):
     adj_hat_flat = adj_hat.flatten()
     adj_true_flat = adj_true.flatten()
 
@@ -401,6 +401,10 @@ def print_report(adj_hat, adj_true, thresh=0.05):
     tnr = tsvar.utils.metrics.tnr(adj_hat_flat, adj_true_flat, threshold=thresh)
     fnr = tsvar.utils.metrics.fnr(adj_hat_flat, adj_true_flat, threshold=thresh)
 
+    print()
+    print('='*50)
+    print(f'========== Method: {name}')
+    print()
     print(f"Accuracy: {acc:.2f}")
     print()
     print('Edge counts')

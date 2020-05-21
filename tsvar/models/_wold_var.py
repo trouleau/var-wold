@@ -174,10 +174,17 @@ def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_
         Indicator of convergence
     """
     x = float(xstart)
+    # print('-'*10)
+    # print(f'j={j}, i={i}  (n={n})')
     for it in numba.prange(max_iter):
         f, fp, fpp = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
                                  dts, delta, valid_mask)
+
         x_new = x - (2 * f * fp) / (2 * fp**2 - f * fpp)
+
+        # if (j == 8) and (i == 66):
+        #     print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
+
         if abs(x - x_new) < tol:
             return x
         x = x_new
@@ -208,12 +215,13 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                  dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_po.shape[1]
     max_iter = 10
-    tol = 1e-5
+    tol = 1e-3
     bs_po = np.ones_like(bs_pr)
     br_po = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            x0[j, i] = solve_halley(xstart=float(x0[j, i]), max_iter=max_iter,
+            x0[j, i] = solve_halley(xstart=0.1,  # float(x0[j, i]),
+                                    max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=0,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -221,7 +229,8 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
-            xn[j, i] = solve_halley(xstart=float(xn[j, i]), max_iter=max_iter,
+            xn[j, i] = solve_halley(xstart=0.1,  # float(xn[j, i]),
+                                    max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=MOMENT_ORDER,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -278,7 +287,7 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                 self.valid_mask_ikj[i][:-1, :].numpy()))
             # TODO: fix this once virtual events in fixed in parent class
             self.delta_ikj[i] = np.hstack((
-                np.zeros((self.n_jumps[i], 1)),  # set \delta_0^ik = 0
+                np.zeros((self.n_jumps[i], 1)),  # set \delta_0^ik = 0 (not used)
                 self.delta_ikj[i][:-1, :].numpy()))
             # Cache Inter-arrival time
             dt_i = np.hstack((self.events[i][0], np.diff(self.events[i])))
@@ -300,8 +309,8 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
         # shape: (dim: j, dim: i)
         self._bs_po = self._bs_pr.copy()  # Beta posterior, shape of InvGamma distribution
         self._br_po = self._br_pr.copy()  # Beta posterior, rate of InvGamma distribution
-        self._b_x0 = self._br_po / (self._bs_po - 1)
-        self._b_xn = 0.1 * self._br_po / (self._bs_po - 1)
+        self._b_x0 = 0.1 * np.ones_like(self._br_po)
+        self._b_xn = 0.1 * np.ones_like(self._br_po)
         # shape: (dim: i, #events_i: k, dim: j)
         self._zp_po = list()  # Z posterior, probabilities of Categorical distribution
         for i in range(self.dim):
@@ -309,6 +318,8 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                / self._zc_pr[i].sum(axis=1)[:, None])
 
     def _iteration(self):
+
+        # print('\n', '#'*50, 'iter:', self._n_iter_done)
 
         # Update alpha
         self._as_po, self._ar_po = _update_alpha(as_pr=self._as_pr,
@@ -320,6 +331,12 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                                  delta_ikj=self.delta_ikj,
                                                  valid_mask_ikj=self.valid_mask_ikj)
 
+        # print('---- Alpha')
+        # print('as:')
+        # print(self._as_po)
+        # print('ar:')
+        # print(self._ar_po)
+
         # Update beta
         self._bs_po, self._br_po, self._b_x0, self._b_xn = _update_beta(
             x0=self._b_x0, xn=self._b_xn, n=MOMENT_ORDER,  # Init equations with previous solutions
@@ -327,12 +344,23 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
             bs_pr=self._bs_pr, br_pr=self._br_pr, dt_ik=self.dt_ik,
             delta_ikj=self.delta_ikj, valid_mask_ikj=self.valid_mask_ikj)
 
-        # # (debug) Sanity check
-        # if (self._as_po.min() < 0) or (self._as_po.min() < 0):
-        #     raise RuntimeError("Negative posterior parameter!")
-        # if (np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)) or
-        #    np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10)):
-        #     raise RuntimeError('Nope nope nope...')
+        # print('---- Beta')
+        # print('x0:')
+        # print( self._b_x0)
+        # print('xn:')
+        # print(self._b_xn)
+        # print('bs:')
+        # print(self._bs_po)
+        # print('br:')
+        # print(self._br_po)
+
+        # (debug) Sanity check
+        if (self._as_po.min() < 0) or (self._as_po.min() < 0):
+            raise RuntimeError("Negative posterior parameter!")
+        if np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)):
+            raise RuntimeError('NaNs in optimization results of beta update!')
+        if np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10):
+            raise RuntimeError('Optimization results of beta update is diverging!')
 
         # Update Z
         self._zp_po = _update_z(as_po=self._as_po,
@@ -345,6 +373,10 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
 
         # Set coeffs attribute for Fitter to assess convergence
         self.coeffs = expect_alpha(as_po=self._as_po, ar_po=self._ar_po)[1:, :].flatten()
+
+        # print('zp:')
+        # print(self._zp_po[0])
+
 
     @enforce_observed
     def fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr, *args, **kwargs):

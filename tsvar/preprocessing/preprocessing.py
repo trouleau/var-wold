@@ -141,8 +141,7 @@ class Dataset:
         self.busca_beta_ji = busca_beta_ji if (busca_beta_ji is not None) else self._compute_busca_beta_ji(self.timestamps)
 
         # Set sparse adjacency matrix attribute
-        graph = self._build_graph_with_indices(graph, ids)
-        self.graph = nx.DiGraph(graph)
+        self.graph = self._build_graph_with_indices(graph, ids)
         assert self.graph.number_of_nodes() == self.dim, "Something went wrong with ground truth graph"
 
         # Set name <-> idx mapping attributes
@@ -153,18 +152,30 @@ class Dataset:
         self.top = top
 
     @classmethod
-    def from_data(cls, timestamps, idx_to_name, graph):
+    def from_data(cls, timestamps, idx_to_name, graph, timescale='median'):
         dataset = cls()
         # Set timestamps attributes
         dataset.timestamps = timestamps
         dataset.dim = len(dataset.timestamps)
         dataset.end_time = max(map(max, dataset.timestamps))
         dataset.top = -1
+
+        # Rescale time
+        busca_beta_ji = None
+        if timescale == 'median':
+            timescale, busca_beta_ji = dataset._compute_median_timescale(dataset.timestamps)
+        elif not (isinstance(timescale, (int, float)) and (timescale > 0)):
+            raise ValueError('`timescale should be a positive number`')
+        dataset.timestamps = [ev / timescale for ev in dataset.timestamps]
+        dataset.time_scale = timescale
+
         # Compute the Busca estimators of beta_ji (if not already done with timescale)
-        dataset.busca_beta_ji = dataset._compute_busca_beta_ji(dataset.timestamps)
+        dataset.busca_beta_ji = busca_beta_ji if (busca_beta_ji is not None) else dataset._compute_busca_beta_ji(dataset.timestamps)
+
         # Set names/idx mappings
         dataset.idx_to_name = idx_to_name
         dataset.name_to_idx = {v: k for k, v in idx_to_name.items()}
+
         # Set graph attribute
         dataset.graph = graph
         return dataset
@@ -277,11 +288,19 @@ class Dataset:
 
     def _build_graph_with_indices(self, graph, ids):
         # Compute the adjacency indexed by index instead of
-        graph_new = {}
+        digraph = nx.DiGraph()
+        # Init all nodes
+        for name, idx in ids.items():
+            digraph.add_node(idx, name=name)
+        num_nodes = digraph.number_of_nodes()
+
         for src in graph.keys():
             src_idx = ids[src]
-            graph_new[src_idx] = {}
             for dst, value in graph[src].items():
                 dst_idx = ids[dst]
-                graph_new[src_idx][dst_idx] = {'weight': value}
-        return graph_new
+                digraph.add_edge(src_idx, dst_idx, weight=value)
+
+        # Sanity check that no new node was added
+        assert digraph.number_of_nodes() == num_nodes
+
+        return digraph

@@ -90,8 +90,9 @@ def get_graph_stamps(path, top=None):
 
 class Dataset:
 
-    def __init__(self, path, top=None, timescale='median', verbose=False):
-        self._from_raw_gz(path, top, timescale, verbose)
+    def __init__(self, path=None, top=None, timescale='median', verbose=False):
+        if path is not None:
+            self._from_raw_gz(path, top, timescale, verbose)
 
     def _from_raw_gz(self, path, top, timescale, verbose):
         """
@@ -150,6 +151,24 @@ class Dataset:
 
         # Keep track of top value
         self.top = top
+
+    @classmethod
+    def from_data(cls, timestamps, idx_to_name, graph):
+        dataset = cls()
+        # Set timestamps attributes
+        dataset.timestamps = timestamps
+        dataset.dim = len(dataset.timestamps)
+        dataset.end_time = max(map(max, dataset.timestamps))
+        dataset.top = -1
+        # Compute the Busca estimators of beta_ji (if not already done with timescale)
+        dataset.busca_beta_ji = dataset._compute_busca_beta_ji(dataset.timestamps)
+        # Set names/idx mappings
+        dataset.idx_to_name = idx_to_name
+        dataset.name_to_idx = {v: k for k, v in idx_to_name.items()}
+        # Set graph attribute
+        dataset.graph = graph
+        return dataset
+
 
     @classmethod
     def from_pickle(cls, path):

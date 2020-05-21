@@ -403,6 +403,11 @@ def print_report(adj_hat, adj_true, thresh=0.05):
 
     print(f"Accuracy: {acc:.2f}")
     print()
+    print('Edge counts')
+    print('------------')
+    print(f"Pred: {np.sum(adj_hat_flat > thresh):.2f}")
+    print(f"True: {np.sum(adj_true_flat > 0):.2f}")
+    print()
     print('Error counts')
     print('------------')
     print(f" True Positive: {tp:.2f}")

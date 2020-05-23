@@ -12,14 +12,14 @@ warnings.filterwarnings(action='ignore', module='numba',
                         category=numba.NumbaPendingDeprecationWarning)
 
 
-@numba.jit(nopython=True, fastmath=True)
+@numba.jit(nopython=True, fastmath=True, parallel=True)
 def _wold_model_init_cache(events):
     dim = len(events)
     n_jumps = [len(events[i]) for i in range(dim)]
     delta_ikj = [np.zeros((n_jumps[i], dim)) for i in range(dim)]
     valid_mask_ikj = [np.ones((n_jumps[i], dim), dtype=np.bool_) for i in range(dim)]
     # For each reiceiving dimension
-    for i in range(dim):
+    for i in numba.prange(dim):
         last_idx_tlj = [-1 for j in range(dim)]
         last_tki = events[i][0]
         # For each observed event, compute the inter-arrival time with

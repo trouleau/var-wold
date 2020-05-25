@@ -146,6 +146,22 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
+def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+    f = tol + 1
+    f_max, _, _ = _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
+    for it in range(max_iter):
+        mid = (x_min + x_max) / 2
+        f, _, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
+        if f * f_max > 0:
+            x_max = mid
+        else:
+            x_min = mid
+        if abs(f) < tol:
+            break
+    return mid
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     """
     Solve the equation to to find the parameters of the posterior of beta.
@@ -181,12 +197,9 @@ def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_
                                  dts, delta, valid_mask)
 
         x_new = x - (2 * f * fp) / (2 * fp**2 - f * fpp)
-
         # if (j == 8) and (i == 66):
         #     print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
-
         # print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
-
         if abs(x - x_new) < tol:
             return x
         x = x_new
@@ -216,30 +229,32 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ik, delta_ikj, valid_mas
 def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                  dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_po.shape[1]
-    max_iter = 10
-    tol = 1e-3
+    max_iter = 15
+    tol = 1e-2
     bs_po = np.ones_like(bs_pr)
     br_po = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            x0[j, i] = solve_halley(xstart=0.01,  # float(x0[j, i]),
-                                    max_iter=max_iter,
-                                    tol=tol, j=j, i=i, n=0,
-                                    bs_pr=bs_pr, br_pr=br_pr,
-                                    as_po=as_po, ar_po=ar_po,
-                                    zp_po=zp_po,
-                                    dts=dt_ik,
-                                    delta=delta_ikj,
-                                    valid_mask=valid_mask_ikj)
-            xn[j, i] = solve_halley(xstart=0.01,  # float(xn[j, i]),
-                                    max_iter=max_iter,
-                                    tol=tol, j=j, i=i, n=MOMENT_ORDER,
-                                    bs_pr=bs_pr, br_pr=br_pr,
-                                    as_po=as_po, ar_po=ar_po,
-                                    zp_po=zp_po,
-                                    dts=dt_ik,
-                                    delta=delta_ikj,
-                                    valid_mask=valid_mask_ikj)
+            # x0[j, i] = solve_halley(xstart=0.01,  # float(x0[j, i]),
+            x0[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
+                                           max_iter=max_iter,
+                                           tol=tol, j=j, i=i, n=0,
+                                           bs_pr=bs_pr, br_pr=br_pr,
+                                           as_po=as_po, ar_po=ar_po,
+                                           zp_po=zp_po,
+                                           dts=dt_ik,
+                                           delta=delta_ikj,
+                                           valid_mask=valid_mask_ikj)
+            # xn[j, i] = solve_halley(xstart=0.01,  # float(xn[j, i]),
+            xn[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
+                                           max_iter=max_iter,
+                                           tol=tol, j=j, i=i, n=MOMENT_ORDER,
+                                           bs_pr=bs_pr, br_pr=br_pr,
+                                           as_po=as_po, ar_po=ar_po,
+                                           zp_po=zp_po,
+                                           dts=dt_ik,
+                                           delta=delta_ikj,
+                                           valid_mask=valid_mask_ikj)
     bs_po = n * xn / (xn - x0) - 1
     br_po = n * xn * x0 / (xn - x0)
     return bs_po, br_po, x0, xn

@@ -106,7 +106,7 @@ def expect_log_beta_p_delta(bs_po, br_po, delta):
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
-def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask, return_fprime2=True):
 
     a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
     x_p_delta = x + delta[i][:, j+1] + 1e-20
@@ -131,6 +131,9 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
 
     fprime = term1 - term2 + np.sum(mask * (term31 - term32))
 
+    if not return_fprime2:
+        return func, fprime, 0.0
+
     term1 *= -2
     term1 /= x
     term2 *= -3
@@ -143,6 +146,37 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
     fprime2 = term1 - term2 + np.sum(mask * (term31 - term32))
 
     return func, fprime, fprime2
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
+def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+    f = tol + 1
+    f_max, _, _ = _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                              dts, delta, valid_mask, return_fprime2=False)
+    for it in range(max_iter):
+        mid = (x_min + x_max) / 2
+        f, _, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                              dts, delta, valid_mask, return_fprime2=False)
+        if f * f_max > 0:
+            x_max = mid
+        else:
+            x_min = mid
+        if abs(f) < tol:
+            break
+    return mid
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
+def solve_newton(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+    x = float(xstart)
+    for it in range(max_iter):
+        f, fp, _ = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                               dts, delta, valid_mask, return_fprime2=False)
+        x_new = x - f / fp
+        if abs(f) < tol:
+            return x
+        x = x_new
+    return x
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
@@ -213,7 +247,9 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
     br_po = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            x0[j, i] = solve_halley(xstart=float(x0[j, i]), max_iter=max_iter,
+            #x0[j, i] = solve_halley(xstart=float(x0[j, i]),
+            x0[j, i] = solve_newton(xstart=0.1,
+                                    max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=0,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -221,7 +257,9 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
-            xn[j, i] = solve_halley(xstart=float(xn[j, i]), max_iter=max_iter,
+            #xn[j, i] = solve_halley(xstart=float(xn[j, i]),
+            xn[j, i] = solve_newton(xstart=0.1,
+                                    max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=MOMENT_ORDER,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,

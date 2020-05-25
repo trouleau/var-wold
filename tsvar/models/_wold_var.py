@@ -9,7 +9,7 @@ from ..utils.decorators import enforce_observed
 from ..fitter import FitterIterativeNumpy
 
 
-MOMENT_ORDER = 5  # Moment of equation to solve for beta update
+MOMENT_ORDER = 1.7  # Moment of equation to solve for beta update
 EPS = 1e-8  # Finite-difference gradient epsilon
 
 
@@ -185,6 +185,8 @@ def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_
         # if (j == 8) and (i == 66):
         #     print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
 
+        # print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
+
         if abs(x - x_new) < tol:
             return x
         x = x_new
@@ -220,7 +222,7 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
     br_po = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            x0[j, i] = solve_halley(xstart=0.1,  # float(x0[j, i]),
+            x0[j, i] = solve_halley(xstart=0.01,  # float(x0[j, i]),
                                     max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=0,
                                     bs_pr=bs_pr, br_pr=br_pr,
@@ -229,7 +231,7 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
-            xn[j, i] = solve_halley(xstart=0.1,  # float(xn[j, i]),
+            xn[j, i] = solve_halley(xstart=0.01,  # float(xn[j, i]),
                                     max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=MOMENT_ORDER,
                                     bs_pr=bs_pr, br_pr=br_pr,
@@ -331,11 +333,17 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                                  delta_ikj=self.delta_ikj,
                                                  valid_mask_ikj=self.valid_mask_ikj)
 
-        # print('---- Alpha')
-        # print('as:')
-        # print(self._as_po)
-        # print('ar:')
-        # print(self._ar_po)
+        print('---- Alpha')
+        print(f'    as: {self._as_po.min():+.2e}, {self._as_po.max():.2e}')
+        print(f'    ar: {self._ar_po.min():+.2e}, {self._ar_po.max():.2e}')
+        a_mean = self._as_po / self._ar_po
+        print(f'a_mean: {a_mean.min():.2e}, {a_mean.max():.2e}')
+
+        # (debug) Sanity check
+        if np.isnan(self._as_po).any() or np.isnan(self._ar_po).any():
+            raise RuntimeError("NaNs in Alpha parameters")
+        if (np.min(self._as_po) < 0) or (np.min(self._ar_po) < 0):
+            raise RuntimeError("Negative Alpha parameters")
 
         # Update beta
         self._bs_po, self._br_po, self._b_x0, self._b_xn = _update_beta(
@@ -344,17 +352,17 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
             bs_pr=self._bs_pr, br_pr=self._br_pr, dt_ik=self.dt_ik,
             delta_ikj=self.delta_ikj, valid_mask_ikj=self.valid_mask_ikj)
 
-        # print('---- Beta')
-        # print('x0:')
-        # print( self._b_x0)
-        # print('xn:')
-        # print(self._b_xn)
-        # print('bs:')
-        # print(self._bs_po)
-        # print('br:')
-        # print(self._br_po)
+        print('---- Beta')
+        print(f'    x0: {self._b_x0.min():+.2e}, {self._b_x0.max():.2e}')
+        print(f'    xn: {self._b_xn.min():+.2e}, {self._b_xn.max():.2e}')
+        print(f'    bs: {self._bs_po.min():+.2e}, {self._bs_po.max():.2e}')
+        print(f'    br: {self._br_po.min():+.2e}, {self._br_po.max():.2e}')
+        b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
+        print(f'b_mean: {b_mean.min():+.2e}, {b_mean.max():.2e}')
 
         # (debug) Sanity check
+        if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():
+            raise RuntimeError("NaNs in Beta parameters")
         if (self._as_po.min() < 0) or (self._as_po.min() < 0):
             raise RuntimeError("Negative posterior parameter!")
         if np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)):

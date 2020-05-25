@@ -9,7 +9,7 @@ from ..utils.decorators import enforce_observed
 from ..fitter import FitterIterativeNumpy
 
 
-MOMENT_ORDER = 1.7  # Moment of equation to solve for beta update
+MOMENT_ORDER = 4  # Moment of equation to solve for beta update
 EPS = 1e-8  # Finite-difference gradient epsilon
 
 
@@ -106,7 +106,7 @@ def expect_log_beta_p_delta(bs_po, br_po, delta):
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
-def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask, return_fprime2=True):
 
     a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
     x_p_delta = x + delta[i][:, j+1] + 1e-20
@@ -131,6 +131,9 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
 
     fprime = term1 - term2 + np.sum(mask * (term31 - term32))
 
+    if not return_fprime2:
+        return func, fprime
+
     term1 *= -2
     term1 /= x
     term2 *= -3
@@ -148,10 +151,12 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     f = tol + 1
-    f_max, _, _ = _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
+    f_max, _ = _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                           dts, delta, valid_mask, return_fprime2=True)
     for it in range(max_iter):
         mid = (x_min + x_max) / 2
-        f, _, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask)
+        f, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                           dts, delta, valid_mask, return_fprime2=True)
         if f * f_max > 0:
             x_max = mid
         else:
@@ -159,6 +164,19 @@ def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_p
         if abs(f) < tol:
             break
     return mid
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
+def solve_newton(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
+    x = float(xstart)
+    for it in range(max_iter):
+        f, fp = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                            dts, delta, valid_mask, return_fprime2=True)
+        x_new = x - f / fp
+        if abs(f) < tol:
+            return x
+        x = x_new
+    return x
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
@@ -192,7 +210,7 @@ def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_
     x = float(xstart)
     # print('-'*10)
     # print(f'j={j}, i={i}  (n={n})')
-    for it in numba.prange(max_iter):
+    for it in range(max_iter):
         f, fp, fpp = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
                                  dts, delta, valid_mask)
 
@@ -236,25 +254,27 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
     for j in numba.prange(dim):
         for i in numba.prange(dim):
             # x0[j, i] = solve_halley(xstart=0.01,  # float(x0[j, i]),
-            x0[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
-                                           max_iter=max_iter,
-                                           tol=tol, j=j, i=i, n=0,
-                                           bs_pr=bs_pr, br_pr=br_pr,
-                                           as_po=as_po, ar_po=ar_po,
-                                           zp_po=zp_po,
-                                           dts=dt_ik,
-                                           delta=delta_ikj,
-                                           valid_mask=valid_mask_ikj)
+            # x0[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
+            x0[j, i] = solve_newton(xstart=0.1,
+                                    max_iter=max_iter,
+                                    tol=tol, j=j, i=i, n=0,
+                                    bs_pr=bs_pr, br_pr=br_pr,
+                                    as_po=as_po, ar_po=ar_po,
+                                    zp_po=zp_po,
+                                    dts=dt_ik,
+                                    delta=delta_ikj,
+                                    valid_mask=valid_mask_ikj)
             # xn[j, i] = solve_halley(xstart=0.01,  # float(xn[j, i]),
-            xn[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
-                                           max_iter=max_iter,
-                                           tol=tol, j=j, i=i, n=MOMENT_ORDER,
-                                           bs_pr=bs_pr, br_pr=br_pr,
-                                           as_po=as_po, ar_po=ar_po,
-                                           zp_po=zp_po,
-                                           dts=dt_ik,
-                                           delta=delta_ikj,
-                                           valid_mask=valid_mask_ikj)
+            # xn[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
+            xn[j, i] = solve_newton(xstart=0.1,
+                                    max_iter=max_iter,
+                                    tol=tol, j=j, i=i, n=MOMENT_ORDER,
+                                    bs_pr=bs_pr, br_pr=br_pr,
+                                    as_po=as_po, ar_po=ar_po,
+                                    zp_po=zp_po,
+                                    dts=dt_ik,
+                                    delta=delta_ikj,
+                                    valid_mask=valid_mask_ikj)
     bs_po = n * xn / (xn - x0) - 1
     br_po = n * xn * x0 / (xn - x0)
     return bs_po, br_po, x0, xn
@@ -349,10 +369,10 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                                  valid_mask_ikj=self.valid_mask_ikj)
 
         print('---- Alpha')
-        print(f'    as: {self._as_po.min():+.2e}, {self._as_po.max():.2e}')
-        print(f'    ar: {self._ar_po.min():+.2e}, {self._ar_po.max():.2e}')
+        print(f'    as: min:{self._as_po.min():+.2e}, max:{self._as_po.max():+.2e}')
+        print(f'    ar: min:{self._ar_po.min():+.2e}, max:{self._ar_po.max():+.2e}')
         a_mean = self._as_po / self._ar_po
-        print(f'a_mean: {a_mean.min():.2e}, {a_mean.max():.2e}')
+        print(f'a_mean: min:{a_mean.min():+.2e}, max:{a_mean.max():+.2e}')
 
         # (debug) Sanity check
         if np.isnan(self._as_po).any() or np.isnan(self._ar_po).any():
@@ -368,12 +388,12 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
             delta_ikj=self.delta_ikj, valid_mask_ikj=self.valid_mask_ikj)
 
         print('---- Beta')
-        print(f'    x0: {self._b_x0.min():+.2e}, {self._b_x0.max():.2e}')
-        print(f'    xn: {self._b_xn.min():+.2e}, {self._b_xn.max():.2e}')
-        print(f'    bs: {self._bs_po.min():+.2e}, {self._bs_po.max():.2e}')
-        print(f'    br: {self._br_po.min():+.2e}, {self._br_po.max():.2e}')
+        print(f'    x0: min:{self._b_x0.min():+.2e}, max:{self._b_x0.max():+.2e}')
+        print(f'    xn: min:{self._b_xn.min():+.2e}, max:{self._b_xn.max():+.2e}')
+        print(f'    bs: min:{self._bs_po.min():+.2e}, max:{self._bs_po.max():+.2e}')
+        print(f'    br: min:{self._br_po.min():+.2e}, max:{self._br_po.max():+.2e}')
         b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
-        print(f'b_mean: {b_mean.min():+.2e}, {b_mean.max():.2e}')
+        print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
 
         # (debug) Sanity check
         if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():

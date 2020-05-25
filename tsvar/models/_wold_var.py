@@ -132,7 +132,7 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
     fprime = term1 - term2 + np.sum(mask * (term31 - term32))
 
     if not return_fprime2:
-        return func, fprime
+        return func, fprime, 0.0
 
     term1 *= -2
     term1 /= x
@@ -151,12 +151,12 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
 def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     f = tol + 1
-    f_max, _ = _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
-                           dts, delta, valid_mask, return_fprime2=True)
+    f_max, _, _= _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                           dts, delta, valid_mask, return_fprime2=False)
     for it in range(max_iter):
         mid = (x_min + x_max) / 2
-        f, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
-                           dts, delta, valid_mask, return_fprime2=True)
+        f, _, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                           dts, delta, valid_mask, return_fprime2=False)
         if f * f_max > 0:
             x_max = mid
         else:
@@ -170,8 +170,8 @@ def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_p
 def solve_newton(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
     x = float(xstart)
     for it in range(max_iter):
-        f, fp = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
-                            dts, delta, valid_mask, return_fprime2=True)
+        f, fp, _ = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
+                            dts, delta, valid_mask, return_fprime2=False)
         x_new = x - f / fp
         if abs(f) < tol:
             return x
@@ -253,9 +253,9 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
     br_po = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            # x0[j, i] = solve_halley(xstart=0.01,  # float(x0[j, i]),
+            x0[j, i] = solve_halley(xstart=float(x0[j, i]),
             # x0[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
-            x0[j, i] = solve_newton(xstart=0.1,
+            # x0[j, i] = solve_newton(xstart=0.1,
                                     max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=0,
                                     bs_pr=bs_pr, br_pr=br_pr,
@@ -264,9 +264,9 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
-            # xn[j, i] = solve_halley(xstart=0.01,  # float(xn[j, i]),
+            xn[j, i] = solve_halley(xstart=float(xn[j, i]),
             # xn[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
-            xn[j, i] = solve_newton(xstart=0.1,
+            # xn[j, i] = solve_newton(xstart=0.1,
                                     max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=MOMENT_ORDER,
                                     bs_pr=bs_pr, br_pr=br_pr,
@@ -398,8 +398,8 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
         # (debug) Sanity check
         if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():
             raise RuntimeError("NaNs in Beta parameters")
-        if (self._as_po.min() < 0) or (self._as_po.min() < 0):
-            raise RuntimeError("Negative posterior parameter!")
+        if (self._bs_po.min() < 0) or (self._bs_po.min() < 0):
+            raise RuntimeError("Negative Beta parameter!")
         if np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)):
             raise RuntimeError('NaNs in optimization results of beta update!')
         if np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10):

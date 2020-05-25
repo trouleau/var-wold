@@ -9,7 +9,7 @@ from ..utils.decorators import enforce_observed
 from ..fitter import FitterIterativeNumpy
 
 
-MOMENT_ORDER = 4  # Moment of equation to solve for beta update
+MOMENT_ORDER = 5  # Moment of equation to solve for beta update
 EPS = 1e-8  # Finite-difference gradient epsilon
 
 
@@ -106,7 +106,7 @@ def expect_log_beta_p_delta(bs_po, br_po, delta):
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
-def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask, return_fprime2=True):
+def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
 
     a_mean = expect_alpha(as_po[j+1, i], ar_po[j+1, i])
     x_p_delta = x + delta[i][:, j+1] + 1e-20
@@ -131,9 +131,6 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
 
     fprime = term1 - term2 + np.sum(mask * (term31 - term32))
 
-    if not return_fprime2:
-        return func, fprime, 0.0
-
     term1 *= -2
     term1 /= x
     term2 *= -3
@@ -146,37 +143,6 @@ def _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid
     fprime2 = term1 - term2 + np.sum(mask * (term31 - term32))
 
     return func, fprime, fprime2
-
-
-@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
-def solve_binary_search(x_min, x_max, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
-    f = tol + 1
-    f_max, _, _= _beta_funcs(x_max, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
-                           dts, delta, valid_mask, return_fprime2=False)
-    for it in range(max_iter):
-        mid = (x_min + x_max) / 2
-        f, _, _ = _beta_funcs(mid, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
-                           dts, delta, valid_mask, return_fprime2=False)
-        if f * f_max > 0:
-            x_max = mid
-        else:
-            x_min = mid
-        if abs(f) < tol:
-            break
-    return mid
-
-
-@numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
-def solve_newton(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po, dts, delta, valid_mask):
-    x = float(xstart)
-    for it in range(max_iter):
-        f, fp, _ = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
-                            dts, delta, valid_mask, return_fprime2=False)
-        x_new = x - f / fp
-        if abs(f) < tol:
-            return x
-        x = x_new
-    return x
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
@@ -208,16 +174,10 @@ def solve_halley(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_
         Indicator of convergence
     """
     x = float(xstart)
-    # print('-'*10)
-    # print(f'j={j}, i={i}  (n={n})')
-    for it in range(max_iter):
+    for it in numba.prange(max_iter):
         f, fp, fpp = _beta_funcs(x, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_po,
                                  dts, delta, valid_mask)
-
         x_new = x - (2 * f * fp) / (2 * fp**2 - f * fpp)
-        # if (j == 8) and (i == 66):
-        #     print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
-        # print(f'it: {it}, f={f:.2e}, fp={fp:.2e}, fpp={fpp:.2e}, x={x:.2e}, xnew={x_new:.2e}')
         if abs(x - x_new) < tol:
             return x
         x = x_new
@@ -247,16 +207,13 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, dt_ik, delta_ikj, valid_mas
 def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                  dt_ik, delta_ikj, valid_mask_ikj):
     dim = as_po.shape[1]
-    max_iter = 15
-    tol = 1e-2
+    max_iter = 10
+    tol = 1e-5
     bs_po = np.ones_like(bs_pr)
     br_po = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            x0[j, i] = solve_halley(xstart=float(x0[j, i]),
-            # x0[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
-            # x0[j, i] = solve_newton(xstart=0.1,
-                                    max_iter=max_iter,
+            x0[j, i] = solve_halley(xstart=float(x0[j, i]), max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=0,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -264,10 +221,7 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
-            xn[j, i] = solve_halley(xstart=float(xn[j, i]),
-            # xn[j, i] = solve_binary_search(x_min=0.01, x_max=30.0,
-            # xn[j, i] = solve_newton(xstart=0.1,
-                                    max_iter=max_iter,
+            xn[j, i] = solve_halley(xstart=float(xn[j, i]), max_iter=max_iter,
                                     tol=tol, j=j, i=i, n=MOMENT_ORDER,
                                     bs_pr=bs_pr, br_pr=br_pr,
                                     as_po=as_po, ar_po=ar_po,
@@ -324,7 +278,7 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                 self.valid_mask_ikj[i][:-1, :].numpy()))
             # TODO: fix this once virtual events in fixed in parent class
             self.delta_ikj[i] = np.hstack((
-                np.zeros((self.n_jumps[i], 1)),  # set \delta_0^ik = 0 (not used)
+                np.zeros((self.n_jumps[i], 1)),  # set \delta_0^ik = 0
                 self.delta_ikj[i][:-1, :].numpy()))
             # Cache Inter-arrival time
             dt_i = np.hstack((self.events[i][0], np.diff(self.events[i])))
@@ -346,8 +300,8 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
         # shape: (dim: j, dim: i)
         self._bs_po = self._bs_pr.copy()  # Beta posterior, shape of InvGamma distribution
         self._br_po = self._br_pr.copy()  # Beta posterior, rate of InvGamma distribution
-        self._b_x0 = 0.1 * np.ones_like(self._br_po)
-        self._b_xn = 0.1 * np.ones_like(self._br_po)
+        self._b_x0 = self._br_po / (self._bs_po - 1)
+        self._b_xn = 0.1 * self._br_po / (self._bs_po - 1)
         # shape: (dim: i, #events_i: k, dim: j)
         self._zp_po = list()  # Z posterior, probabilities of Categorical distribution
         for i in range(self.dim):
@@ -355,8 +309,6 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                / self._zc_pr[i].sum(axis=1)[:, None])
 
     def _iteration(self):
-
-        # print('\n', '#'*50, 'iter:', self._n_iter_done)
 
         # Update alpha
         self._as_po, self._ar_po = _update_alpha(as_pr=self._as_pr,
@@ -368,18 +320,6 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                                  delta_ikj=self.delta_ikj,
                                                  valid_mask_ikj=self.valid_mask_ikj)
 
-        print('---- Alpha')
-        print(f'    as: min:{self._as_po.min():+.2e}, max:{self._as_po.max():+.2e}')
-        print(f'    ar: min:{self._ar_po.min():+.2e}, max:{self._ar_po.max():+.2e}')
-        a_mean = self._as_po / self._ar_po
-        print(f'a_mean: min:{a_mean.min():+.2e}, max:{a_mean.max():+.2e}')
-
-        # (debug) Sanity check
-        if np.isnan(self._as_po).any() or np.isnan(self._ar_po).any():
-            raise RuntimeError("NaNs in Alpha parameters")
-        if (np.min(self._as_po) < 0) or (np.min(self._ar_po) < 0):
-            raise RuntimeError("Negative Alpha parameters")
-
         # Update beta
         self._bs_po, self._br_po, self._b_x0, self._b_xn = _update_beta(
             x0=self._b_x0, xn=self._b_xn, n=MOMENT_ORDER,  # Init equations with previous solutions
@@ -387,23 +327,12 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
             bs_pr=self._bs_pr, br_pr=self._br_pr, dt_ik=self.dt_ik,
             delta_ikj=self.delta_ikj, valid_mask_ikj=self.valid_mask_ikj)
 
-        print('---- Beta')
-        print(f'    x0: min:{self._b_x0.min():+.2e}, max:{self._b_x0.max():+.2e}')
-        print(f'    xn: min:{self._b_xn.min():+.2e}, max:{self._b_xn.max():+.2e}')
-        print(f'    bs: min:{self._bs_po.min():+.2e}, max:{self._bs_po.max():+.2e}')
-        print(f'    br: min:{self._br_po.min():+.2e}, max:{self._br_po.max():+.2e}')
-        b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
-        print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
-
-        # (debug) Sanity check
-        if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():
-            raise RuntimeError("NaNs in Beta parameters")
-        if (self._bs_po.min() < 0) or (self._bs_po.min() < 0):
-            raise RuntimeError("Negative Beta parameter!")
-        if np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)):
-            raise RuntimeError('NaNs in optimization results of beta update!')
-        if np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10):
-            raise RuntimeError('Optimization results of beta update is diverging!')
+        # # (debug) Sanity check
+        # if (self._as_po.min() < 0) or (self._as_po.min() < 0):
+        #     raise RuntimeError("Negative posterior parameter!")
+        # if (np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)) or
+        #    np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10)):
+        #     raise RuntimeError('Nope nope nope...')
 
         # Update Z
         self._zp_po = _update_z(as_po=self._as_po,
@@ -416,10 +345,6 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
 
         # Set coeffs attribute for Fitter to assess convergence
         self.coeffs = expect_alpha(as_po=self._as_po, ar_po=self._ar_po)[1:, :].flatten()
-
-        # print('zp:')
-        # print(self._zp_po[0])
-
 
     @enforce_observed
     def fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr, *args, **kwargs):

@@ -12,14 +12,14 @@ warnings.filterwarnings(action='ignore', module='numba',
                         category=numba.NumbaPendingDeprecationWarning)
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True)
+@numba.jit(nopython=True, fastmath=True)
 def _wold_model_init_cache(events):
     dim = len(events)
     n_jumps = [len(events[i]) for i in range(dim)]
     delta_ikj = [np.zeros((n_jumps[i], dim)) for i in range(dim)]
     valid_mask_ikj = [np.ones((n_jumps[i], dim), dtype=np.bool_) for i in range(dim)]
     # For each reiceiving dimension
-    for i in numba.prange(dim):
+    for i in range(dim):
         last_idx_tlj = [-1 for j in range(dim)]
         last_tki = events[i][0]
         # For each observed event, compute the inter-arrival time with
@@ -28,7 +28,7 @@ def _wold_model_init_cache(events):
             if k == 0:
                 # Delta should be ignored for the first event.
                 # Mark has invalid
-                valid_mask_ikj[i][k, :] = 0
+                valid_mask_ikj[i][k,:] = 0
                 continue
             last_tki = events[i][k-1]
             # For each incoming dimension
@@ -36,7 +36,7 @@ def _wold_model_init_cache(events):
                 if (last_idx_tlj[j] < 0) and (events[j][0] >= last_tki):
                     # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
                     # Mark as invalid
-                    valid_mask_ikj[i][k, j] = 0
+                    valid_mask_ikj[i][k,j] = 0
                     continue
                 # Update last index for dim `j`
                 l = max(last_idx_tlj[j], 0)
@@ -181,13 +181,15 @@ class WoldModel(Model):
         computations of inter-arrival time for future log-likelihood calls.
         """
         super().observe(events, end_time)
-
         #
         # TODO: Observed events, add a virtual event at `end_time` for easier
         # log-likelihood computation. Remove the virtual event, it's nasty and
         # will eventually introduce bugs.
+        self.events = []
         for i in range(self.dim):
-            self.events[i] = torch.cat((self.events[i], torch.tensor([self.end_time], dtype=torch.float, device=self.device)))
+            self.events.append(torch.cat((
+                events[i], torch.tensor([self.end_time], dtype=torch.float,
+                                        device=self.device))))
         self.n_jumps = list(map(len, self.events))
         #
         # Number of parameters of the model

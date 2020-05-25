@@ -13,42 +13,54 @@ warnings.filterwarnings(action='ignore', module='numba',
 
 
 @numba.jit(nopython=True, fastmath=True)
+def _wold_model_init_cache_i(events, n_jumps, i):
+    dim = len(events)
+    valid_mask_ikj_i = np.ones((n_jumps[i], dim), dtype=np.bool_)
+    delta_ikj_i = np.zeros((n_jumps[i], dim))
+
+    last_idx_tlj = [-1 for j in range(dim)]
+    last_tki = events[i][0]
+    # For each observed event, compute the inter-arrival time with
+    # each dimension
+    for k, tki in enumerate(events[i]):
+        if k == 0:
+            # Delta should be ignored for the first event.
+            # Mark has invalid
+            valid_mask_ikj_i[k, :] = 0
+            continue
+        last_tki = events[i][k-1]
+        # For each incoming dimension
+        for j in range(dim):
+            if (last_idx_tlj[j] < 0) and (events[j][0] >= last_tki):
+                # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
+                # Mark as invalid
+                valid_mask_ikj_i[k, j] = 0
+                continue
+            # Update last index for dim `j`
+            l = max(last_idx_tlj[j], 0)
+            while (events[j][l] < float(last_tki)):
+                l += 1
+                if l == n_jumps[j]:
+                    break
+            l -= 1
+            last_idx_tlj[int(j)] = int(l)
+            # Set delta_ikj
+            delta_ikj_i[k, j] = last_tki - events[j][l]
+    last_tki = tki
+    return delta_ikj_i, valid_mask_ikj_i
+
+
+@numba.jit(nopython=True, fastmath=True, parallel=True)
 def _wold_model_init_cache(events):
     dim = len(events)
     n_jumps = [len(events[i]) for i in range(dim)]
-    delta_ikj = [np.zeros((n_jumps[i], dim)) for i in range(dim)]
-    valid_mask_ikj = [np.ones((n_jumps[i], dim), dtype=np.bool_) for i in range(dim)]
+    delta_ikj = dict()
+    valid_mask_ikj = dict()
     # For each reiceiving dimension
-    for i in range(dim):
-        last_idx_tlj = [-1 for j in range(dim)]
-        last_tki = events[i][0]
-        # For each observed event, compute the inter-arrival time with
-        # each dimension
-        for k, tki in enumerate(events[i]):
-            if k == 0:
-                # Delta should be ignored for the first event.
-                # Mark has invalid
-                valid_mask_ikj[i][k,:] = 0
-                continue
-            last_tki = events[i][k-1]
-            # For each incoming dimension
-            for j in range(dim):
-                if (last_idx_tlj[j] < 0) and (events[j][0] >= last_tki):
-                    # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
-                    # Mark as invalid
-                    valid_mask_ikj[i][k,j] = 0
-                    continue
-                # Update last index for dim `j`
-                l = max(last_idx_tlj[j], 0)
-                while (events[j][l] < float(last_tki)):
-                    l += 1
-                    if l == n_jumps[j]:
-                        break
-                l -= 1
-                last_idx_tlj[int(j)] = int(l)
-                # Set delta_ikj
-                delta_ikj[i][k,j] = last_tki - events[j][l]
-        last_tki = tki
+    for i in numba.prange(dim):
+        delta_ikj_i, valid_mask_ikj_i = _wold_model_init_cache_i(events, n_jumps, i)
+        delta_ikj[i] = delta_ikj_i
+        valid_mask_ikj[i] = valid_mask_ikj_i
     return delta_ikj, valid_mask_ikj
 
 

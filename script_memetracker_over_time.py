@@ -131,12 +131,14 @@ if __name__ == "__main__":
         train_events, test_events = split_train_test(dataset, chunk_idx, chunk_total)
 
         # Print stats on the training set
+        print('---')
         print(f"Num. of dimensions: {len(train_events):,d}")
         print(f"    Num. of events: {sum(map(len, train_events)):,d}")
         print()
         print("Stats. of num. of events per dim:")
         num_jumps_per_dim = np.array(list(map(len, train_events)))
         print(pd.Series(num_jumps_per_dim).describe())
+        print('---')
 
         # Run VI
         vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, chunk_idx)
@@ -154,7 +156,7 @@ if __name__ == "__main__":
             'gb_coeffs_hat': gb_coeffs_hat
         })
 
-        print('-' * 50)
+        print('=' * 50)
 
     # Save the results
     with open('memetracker-results.pk', 'wb') as f:

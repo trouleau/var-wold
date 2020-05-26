@@ -58,7 +58,7 @@ def worker(filename):
                         df_rows.append(row)
         df = pd.DataFrame(df_rows, columns=['Date', 'Hyperlink', 'Blog', 'PostNb', 'WeightOfLink', 'PostURL', 'HyperlinkURL'])
         df['Date'] = pd.to_datetime(df['Date'])
-        df.to_csv("df_"+filename[16:23]+".csv", index=False)
+        df.to_pickle("df_"+filename[16:23]+".pk")
 
 
 if __name__ == "__main__":

@@ -46,9 +46,9 @@ def run_vi(train_events, test_events, chunk_idx):
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
         x0=(as_pr[1:, :] / ar_pr[1:, :]).flatten(), print_every=1,
-        coeffs_true=np.zeros(dim ** 2),
+        coeffs_true=np.ones(dim ** 2),
         acc_thresh=0.05, dim=dim,
-        widgets={'f1score', 'relerr', 'prec@5', 'prec@10', 'prec@20'},
+        widgets={'f1score', 'relerr'},
         default_end='\n')
 
     # Fit model

@@ -382,6 +382,17 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
                                                  delta_ikj=self.delta_ikj,
                                                  valid_mask_ikj=self.valid_mask_ikj)
 
+        #print('---- Alpha')
+        #print(f'    as: min:{self._as_po.min():+.2e}, max:{self._as_po.max():+.2e}')
+        #print(f'    ar: min:{self._ar_po.min():+.2e}, max:{self._ar_po.max():+.2e}')
+        a_mean = self._as_po / self._ar_po
+        print(f'a_mean: min:{a_mean.min():+.2e}, max:{a_mean.max():+.2e}')
+        # (debug) Sanity check
+        if np.isnan(self._as_po).any() or np.isnan(self._ar_po).any():
+            raise RuntimeError("NaNs in Alpha parameters")
+        if (np.min(self._as_po) < 0) or (np.min(self._ar_po) < 0):
+            raise RuntimeError("Negative Alpha parameters")
+
         # Update beta
         self._bs_po, self._br_po, self._b_x0, self._b_xn = _update_beta(
             x0=self._b_x0, xn=self._b_xn, n=MOMENT_ORDER,  # Init equations with previous solutions
@@ -389,12 +400,24 @@ class WoldModelVariational(WoldModel, FitterIterativeNumpy):
             bs_pr=self._bs_pr, br_pr=self._br_pr, dt_ik=self.dt_ik,
             delta_ikj=self.delta_ikj, valid_mask_ikj=self.valid_mask_ikj)
 
-        # # (debug) Sanity check
-        # if (self._as_po.min() < 0) or (self._as_po.min() < 0):
-        #     raise RuntimeError("Negative posterior parameter!")
-        # if (np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)) or
-        #    np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10)):
-        #     raise RuntimeError('Nope nope nope...')
+        #print('---- Beta')
+        #print(f'    x0: min:{self._b_x0.min():+.2e}, max:{self._b_x0.max():+.2e}')
+        #print(f'    xn: min:{self._b_xn.min():+.2e}, max:{self._b_xn.max():+.2e}')
+        #print(f'    bs: min:{self._bs_po.min():+.2e}, max:{self._bs_po.max():+.2e}')
+        #print(f'    br: min:{self._br_po.min():+.2e}, max:{self._br_po.max():+.2e}')
+        b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
+        print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
+        # (debug) Sanity check
+        if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():
+            raise RuntimeError("NaNs in Beta parameters")
+        if (self._bs_po.min() <= 0) or (self._bs_po.min() <= 0):
+            raise RuntimeError("Negative Beta parameter!")
+        if np.any(np.isnan(self._b_x0)) or np.any(np.isnan(self._b_xn)):
+            raise RuntimeError('NaNs in optimization results of beta update!')
+        if np.any(np.abs(self._b_x0) > 1e10) or np.any(self._b_xn > 1e10):
+            raise RuntimeError('Optimization results of beta update is diverging!')
+        if (self._b_x0.min() < 0) or (self._b_xn.min() < 0):
+            raise RuntimeError('Optimization results of beta update is negative!')
 
         # Update Z
         self._zp_po = _update_z(as_po=self._as_po,

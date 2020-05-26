@@ -34,8 +34,8 @@ def run_vi(train_events, test_events, chunk_idx):
     as_pr = 10.0 * np.ones((dim + 1, dim))
     ar_pr = 100.0 * np.ones((dim + 1, dim))
     # Set prior: Beta
-    bs_pr = 20001.0 * np.ones((dim, dim))
-    br_pr = 10000.0 * np.ones((dim, dim))
+    bs_pr = 101.0 * np.ones((dim, dim))
+    br_pr = 100.0 * np.ones((dim, dim))
     # Set prior: Z
     zc_pr = [1.0 * np.ones((len(train_events[i]), dim+1)) for i in range(dim)]
 

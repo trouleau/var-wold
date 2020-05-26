@@ -257,6 +257,18 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
+            if x0[j, i] < 0:
+                print('Beta optim failed for x0, swtich to bin search')
+                x0[j, i] = solve_binary_search(
+                    x_min=0.01, x_max=200.0,
+                    max_iter=20, tol=1e-2,
+                    j=j, i=i, n=0,
+                    bs_pr=bs_pr, br_pr=br_pr,
+                    as_po=as_po, ar_po=ar_po,
+                    zp_po=zp_po,
+                    dts=dt_ik,
+                    delta=delta_ikj,
+                    valid_mask=valid_mask_ikj)
             #xn[j, i] = solve_halley(xstart=float(xn[j, i]),
             xn[j, i] = solve_newton(xstart=0.1,
                                     max_iter=max_iter,
@@ -267,6 +279,18 @@ def _update_beta(*, x0, xn, n, as_po, ar_po, zp_po, bs_pr, br_pr,
                                     dts=dt_ik,
                                     delta=delta_ikj,
                                     valid_mask=valid_mask_ikj)
+            if xn[j, i] < 0:
+                print('Beta optim failed for xn, switch to bin search')
+                x0[j, i] = solve_binary_search(
+                    x_min=0.01, x_max=200.0,
+                    max_iter=20, tol=1e-2,
+                    j=j, i=i, n=MOMENT_ORDER,
+                    bs_pr=bs_pr, br_pr=br_pr,
+                    as_po=as_po, ar_po=ar_po,
+                    zp_po=zp_po,
+                    dts=dt_ik,
+                    delta=delta_ikj,
+                    valid_mask=valid_mask_ikj)
     bs_po = n * xn / (xn - x0) - 1
     br_po = n * xn * x0 / (xn - x0)
     return bs_po, br_po, x0, xn

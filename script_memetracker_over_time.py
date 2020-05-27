@@ -1,34 +1,15 @@
 import numpy as np
 import pandas as pd
+import networkx as nx
 import torch
 import pickle
 
 import gb
 
 import tsvar
-from tsvar.preprocessing import Dataset
 
 
-def split_train_test(dataset, chunk_idx, chunk_total):
-    # Set start and end times of train and test sets
-    train_t0 = dataset.end_time * chunk_idx / chunk_total
-    train_t1 = dataset.end_time * (chunk_idx + 1) / chunk_total
-    test_t0 = dataset.end_time * (chunk_idx + 1) / chunk_total
-    test_t1 = dataset.end_time * (chunk_idx + 2) / chunk_total
-    # Filter the events in train/test observation windows
-    train_events = [ev[(ev >= train_t0) & (ev < train_t1)] for ev in dataset.timestamps]
-    test_events = [ev[(ev >= test_t0) & (ev < test_t1)] for ev in dataset.timestamps]
-    # Remove dimensions with no nodes
-    nodes_to_keep = np.array([(len(train_events[i]) > 0) & (len(test_events[i]) > 0)
-                              for i in range(dataset.dim)])
-    train_events = np.array(train_events)[nodes_to_keep].tolist()
-    train_events = [ev - train_t0 for ev in train_events]
-    test_events = np.array(test_events)[nodes_to_keep].tolist()
-    test_events = [ev - test_t0 for ev in test_events]
-    return train_events, test_events
-
-
-def run_vi(train_events, test_events, chunk_idx):
+def run_vi(train_events, test_events, chunk_idx, adjacency_true):
     dim = len(train_events)
     # Set prior: Alpha
     as_pr = 10.0 * np.ones((dim + 1, dim))
@@ -40,15 +21,14 @@ def run_vi(train_events, test_events, chunk_idx):
     zc_pr = [1.0 * np.ones((len(train_events[i]), dim+1)) for i in range(dim)]
 
     # Define model
-    vi_model = tsvar.models.WoldModelVariational(verbose=True)
+    vi_model = tsvar.models.WoldModelVariationalOther(verbose=True)
     vi_model.observe(train_events)
 
     # Set callback (parameters of callback are just the posterior mean of alpha)
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
         x0=(as_pr[1:, :] / ar_pr[1:, :]).flatten(), print_every=1,
-        coeffs_true=np.ones(dim ** 2),
-        acc_thresh=0.05, dim=dim,
-        widgets={'f1score', 'relerr'},
+        coeffs_true=adjacency_true.flatten(), acc_thresh=0.05, dim=dim,
+        widgets={'f1score', 'relerr', 'prec@5', 'prec@10', 'prec@20'},
         default_end='\n')
 
     # Fit model
@@ -111,10 +91,16 @@ def run_gb(train_events, test_events, chunk_idx):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-o', dest='out_path', type=str, required=False,
+                        default='memetracker-results.pk',
+                        help="Experiment directory")
+    args = parser.parse_args()
 
     # Load the dataset
-    INPUT_PATH = "/root/workspace/var-wold/data/memetracker/dataset_memetracker_good.pk"
-    dataset = Dataset.from_pickle(INPUT_PATH)
+    INPUT_PATH = "/root/workspace/var-wold/data/memetracker/memetracker-top100-clean.pickle.gz"
+    dataset = tsvar.preprocessing.MemeTrackerDataset(INPUT_PATH)
+    dataset.data.Timestamp /= 426.3722723177017
 
     # Number of chunks to use
     chunk_total = 20
@@ -124,24 +110,30 @@ if __name__ == "__main__":
     for chunk_idx in range(chunk_total - 1):
 
         print()
-        print(f'-------- Start chunk {chunk_idx}')
+        print('-' * 20, f'Start chunk {chunk_idx}')
         print()
 
         # Extract train/test sets for this chunk
-        train_events, test_events = split_train_test(dataset, chunk_idx, chunk_total)
+        train_events, train_graph, test_events, test_graph = dataset.build_train_test(train_start, train_end, test_end)
+        nodelist = sorted(train_events.keys())
+        adjacency_true = nx.adjacency_matrix(train_graph, nodelist).toarray()
+        train_events = [train_events[v] for v in nodelist]
+        test_events = [test_events[v] for v in nodelist]
 
         # Print stats on the training set
-        print('---')
-        print(f"Num. of dimensions: {len(train_events):,d}")
-        print(f"    Num. of events: {sum(map(len, train_events)):,d}")
+        print('Train set')
+        print(f"  Num. of dimensions: {len(train_events):,d}")
+        print(f"      Num. of events: {sum(map(len, train_events)):,d}")
+        print(f"  Observation window: [{min(map(min, train_events)):.2f}, {max(map(max, train_events)):.2f}]")
         print()
-        print("Stats. of num. of events per dim:")
-        num_jumps_per_dim = np.array(list(map(len, train_events)))
-        print(pd.Series(num_jumps_per_dim).describe())
-        print('---')
+        print('Test set')
+        print(f"  Num. of dimensions: {len(test_events):,d}")
+        print(f"      Num. of events: {sum(map(len, test_events)):,d}")
+        print(f"  Observation window: [{min(map(min, test_events)):.2f}, {max(map(max, test_events)):.2f}]")
+        print()
 
         # Run VI
-        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, chunk_idx)
+        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, chunk_idx, adjacency_true)
 
         # Run GB
         gb_ll, gb_coeffs_hat = run_gb(train_events, test_events, chunk_idx)
@@ -150,14 +142,15 @@ if __name__ == "__main__":
         res.append({
             'chunk_idx': chunk_idx,
             'chunk_total': chunk_total,
+            'dim': len(nodelist),
             'vi_ll': vi_ll,
-            'vi_coeffs_hat': vi_coeffs_hat,
+            'vi_coeffs_hat': vi_coeffs_hat.numpy(),
             'gb_ll': gb_ll,
-            'gb_coeffs_hat': gb_coeffs_hat
+            'gb_coeffs_hat': gb_coeffs_hat.numpy()
         })
 
         print('=' * 50)
 
     # Save the results
-    with open('memetracker-results.pk', 'wb') as f:
+    with open(args.outpath, 'wb') as f:
         pickle.dump(res, f)

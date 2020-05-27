@@ -90,11 +90,11 @@ def get_graph_stamps(path, top=None):
 
 class Dataset:
 
-    def __init__(self, path=None, top=None, timescale='median', verbose=False):
+    def __init__(self, path=None, top=None, timescale='busca'):
         if path is not None:
-            self._from_raw_gz(path, top, timescale, verbose)
+            self._from_raw_gz(path, top, timescale)
 
-    def _from_raw_gz(self, path, top, timescale, verbose):
+    def _from_raw_gz(self, path, top, timescale):
         """
         Process a G-zipped csv file of events. Each row is assumed to be
         formatted as (`sender`, `receiver`, ..., `timestamp`), with possible
@@ -107,79 +107,64 @@ class Dataset:
         valid = self._find_valid_entities(path, top)
         # Extract timestamps and ground truth adjacency graph
         timestamps, sources, graph, ids = self._build_point_process(path, valid)
-
-        # Set point process attributes
+        # Set point process attributes as `np.ndarray`s
         self.timestamps = list(map(np.array, timestamps))
         self.sources = list(map(np.array, sources))
-        # Delete the original objects to avoid bugs
+        # Delete the original objects
         del timestamps
         del sources
-
-        # Process the timestamps
+        # Sort the timestamps (if necessary) and move first event to origin
         sargs = list(map(np.argsort, self.timestamps))  # argsort timestamps
         # Sort the timestamps
         self.timestamps = [ev[s] for ev, s in zip(self.timestamps, sargs)]
         # Sort the ground truth causal source of each event
         self.sources = [ev[s] for ev, s in zip(self.sources, sargs)]
-
+        # Move timestamp to origin
+        min_time = min(map(min, self.timestamps))
+        self.timestamps = [ev - min_time for ev in self.timestamps]
         # Set dimension attribute
         self.dim = len(self.timestamps)
-
         # Rescale time
-        busca_beta_ji = None
         if timescale == 'median':
-            timescale, busca_beta_ji = self._compute_median_timescale(self.timestamps)
+            timescale = self._compute_median_timescale(self.timestamps)
         elif not (isinstance(timescale, (int, float)) and (timescale > 0)):
             raise ValueError('`timescale should be a positive number`')
         self.timestamps = [ev / timescale for ev in self.timestamps]
         self.time_scale = timescale
-
         # Set end time attribute
         self.end_time = max(map(max, self.timestamps))
-
-        # Compute the Busca estimators of beta_ji (if not already done with timescale)
-        self.busca_beta_ji = busca_beta_ji if (busca_beta_ji is not None) else self._compute_busca_beta_ji(self.timestamps)
-
         # Set sparse adjacency matrix attribute
         self.graph = self._build_graph_with_indices(graph, ids)
         assert self.graph.number_of_nodes() == self.dim, "Something went wrong with ground truth graph"
-
         # Set name <-> idx mapping attributes
         self.name_to_idx = ids
         self.idx_to_name = dict(zip(ids.values(), ids.keys()))
-
         # Keep track of top value
         self.top = top
 
     @classmethod
-    def from_data(cls, timestamps, idx_to_name, graph, timescale='median'):
+    def from_data(cls, timestamps, idx_to_name, graph, timescale='busca'):
         dataset = cls()
         # Set timestamps attributes
         dataset.timestamps = timestamps
         dataset.dim = len(dataset.timestamps)
         dataset.end_time = max(map(max, dataset.timestamps))
         dataset.top = -1
-
         # Rescale time
-        busca_beta_ji = None
-        if timescale == 'median':
+        if timescale == 'busca':
             timescale, busca_beta_ji = dataset._compute_median_timescale(dataset.timestamps)
         elif not (isinstance(timescale, (int, float)) and (timescale > 0)):
             raise ValueError('`timescale should be a positive number`')
         dataset.timestamps = [ev / timescale for ev in dataset.timestamps]
         dataset.time_scale = timescale
-
-        # Compute the Busca estimators of beta_ji (if not already done with timescale)
-        dataset.busca_beta_ji = busca_beta_ji if (busca_beta_ji is not None) else dataset._compute_busca_beta_ji(dataset.timestamps)
-
+        # Set end time attribute
+        dataset.end_time = max(map(max, dataset.timestamps))
         # Set names/idx mappings
         dataset.idx_to_name = idx_to_name
         dataset.name_to_idx = {v: k for k, v in idx_to_name.items()}
-
         # Set graph attribute
         dataset.graph = graph
         return dataset
-
 
     @classmethod
     def from_pickle(cls, path):
@@ -191,27 +176,11 @@ class Dataset:
         # Compute the inter-arrival times
         wmod = tsvar.models.WoldModel()
         wmod.observe(timestamps)
+        # Compute the median inter-event time accross all events
         median_delta = np.median(np.hstack(map(np.ravel, wmod.delta_ikj)))
         # Busca estimator for beta in Wold processes
         scale = median_delta / exp(1)
-
-        if return_busca_betas:
-            busca_beta_ji = self._compute_busca_beta_ji(timestamps, wmod)
-            busca_beta_ji /= scale
-            return scale, busca_beta_ji
-
         return scale
-
-    def _compute_busca_beta_ji(self, timestamps, wmod=None):
-        if wmod is None:
-            # Init WoldModel to get inter-arrival time deltas
-            wmod = tsvar.models.WoldModel()
-            wmod.observe(timestamps)
-        # Compute the busca estimaotr of beta_ji
-        busca_beta_ji = np.zeros((wmod.dim, wmod.dim))
-        for i in range(wmod.dim):
-            busca_beta_ji[:, i] = np.median(wmod.delta_ikj[i], axis=0) / exp(1)
-        return busca_beta_ji
 
     def _find_valid_entities(self, path, top):
         count = defaultdict(int)  # Count number of events in dst

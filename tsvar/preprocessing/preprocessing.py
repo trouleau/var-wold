@@ -5,87 +5,7 @@ import pickle
 import numpy as np
 import networkx as nx
 
-
 import tsvar
-
-
-def get_graph_stamps(path, top=None):
-
-    # ==== Find valid entities
-    # ========================
-
-    count = defaultdict(int)  # Count number of events in dst
-    srcs = set()  # Set of sources
-    with gzip.open(path, 'r') as in_file:
-        for line in in_file:
-            if b',' in line:
-                spl = line.split(b',')
-            else:
-                spl = line.split()
-            src, dst = spl[:2]
-            count[dst] += 1
-            srcs.add(src)
-
-    # Filter valid users
-    if top is None:
-        valid = srcs
-    else:
-        valid = set()
-        for v, k in sorted(((v, k) for k, v in count.items()), reverse=True):
-            if k in srcs:
-                valid.add(k)
-                if len(valid) == top:
-                    break
-
-    # ==== Build point process
-    # ========================
-
-    graph = {}  # Adjacency links graph[src][dst]
-    ids = {}  # Id mapping dst -> incremental integers
-    with gzip.open(path, 'r') as in_file:
-        timestamps = []
-        for line in in_file:
-
-            # Read line
-            if b',' in line:
-                spl = line.split(b',')
-            else:
-                spl = line.split()
-
-            src, dst = spl[:2]
-            stamp = float(spl[-1])
-
-            # Ignore if src or dst not valid
-            if src not in valid:
-                continue
-            if dst not in valid:
-                continue
-
-            # Add event
-            if src not in graph:
-                graph[src] = {}
-            if dst not in graph[src]:
-                graph[src][dst] = 0
-            graph[src][dst] += 1
-            if dst in ids:
-                timestamps[ids[dst]].append(stamp)
-            else:
-                ids[dst] = len(timestamps)
-                timestamps.append([stamp])
-
-    # ==== Consolidate `graph` structure
-    # ==================================
-
-    # Delete graph src keys that are not part of the dst in ids
-    for id_ in list(graph.keys()):
-        if id_ not in ids:
-            del graph[id_]
-    # Add missing keys for all dst not there with an empty adjacency
-    for id_ in ids:
-        if id_ not in graph:
-            graph[id_] = {}
-
-    return timestamps, graph, ids
 
 
 class Dataset:
@@ -183,8 +103,8 @@ class Dataset:
         return scale
 
     def _find_valid_entities(self, path, top):
-        count = defaultdict(int)  # Count number of events in dst
-        srcs = set()  # Set of sources
+        # Count number of events in dst
+        count = defaultdict(int)
         with gzip.open(path, 'r') as in_file:
             for line in in_file:
                 if b',' in line:
@@ -193,18 +113,17 @@ class Dataset:
                     spl = line.split()
                 src, dst = spl[:2]
                 count[dst] += 1
-                srcs.add(src)
-
         # Filter valid users
         if top is None:
-            valid = srcs
+            # All users with at least one received events
+            valid = set(count.keys())
         else:
+            # top users with most received events
             valid = set()
             for v, k in sorted(((v, k) for k, v in count.items()), reverse=True):
-                if k in srcs:
-                    valid.add(k)
-                    if len(valid) == top:
-                        break
+                valid.add(k)
+                if len(valid) == top:
+                    break
         return valid
 
     def _build_point_process(self, path, valid):
@@ -216,21 +135,23 @@ class Dataset:
             for line in in_file:
 
                 # Read line
-                if b',' in line:
+                if b',' in line:  # comma-separated
                     spl = line.split(b',')
-                else:
+                else:  # whitespace-separated
                     spl = line.split()
+                # First two columns must be src & dst
                 src, dst = spl[:2]
+                # Last column must be the timestamp
                 stamp = float(spl[-1])
 
                 # Ignore if src or dst not valid
-                if src not in valid:
+                if (src not in valid) or (src == b''):  # src can be null (in MemeTracker)
                     continue
                 if dst not in valid:
                     continue
 
                 # Add event
-                if src not in graph:
+                if (src not in graph):
                     graph[src] = {}
                 if dst not in graph[src]:
                     graph[src][dst] = 0

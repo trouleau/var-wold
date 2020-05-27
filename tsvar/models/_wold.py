@@ -50,7 +50,7 @@ def _wold_model_init_cache_i(events, n_jumps, i):
     return delta_ikj_i, valid_mask_ikj_i
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True)
+@numba.jit(nopython=True, fastmath=True, parallel=False)
 def _wold_model_init_cache(events):
     dim = len(events)
     n_jumps = [len(events[i]) for i in range(dim)]

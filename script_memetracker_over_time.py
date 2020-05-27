@@ -1,22 +1,21 @@
 import numpy as np
-import pandas as pd
 import networkx as nx
+import argparse
 import torch
 import pickle
 
 import gb
-
 import tsvar
 
 
-def run_vi(train_events, test_events, chunk_idx, adjacency_true):
+def run_vi(train_events, test_events, chunk_idx, adjacency_true, prior):
     dim = len(train_events)
     # Set prior: Alpha
-    as_pr = 10.0 * np.ones((dim + 1, dim))
-    ar_pr = 100.0 * np.ones((dim + 1, dim))
+    as_pr = prior['as_pr'] * np.ones((dim + 1, dim))
+    ar_pr = prior['ar_pr'] * np.ones((dim + 1, dim))
     # Set prior: Beta
-    bs_pr = 101.0 * np.ones((dim, dim))
-    br_pr = 100.0 * np.ones((dim, dim))
+    bs_pr = prior['bs_pr'] * np.ones((dim, dim))
+    br_pr = prior['br_pr'] * np.ones((dim, dim))
     # Set prior: Z
     zc_pr = [1.0 * np.ones((len(train_events[i]), dim+1)) for i in range(dim)]
 
@@ -59,7 +58,7 @@ def run_gb(train_events, test_events, chunk_idx):
     # Define model
     granger_model = gb.GrangerBusca(
         alpha_prior=1.0/len(train_events),
-        num_iter=300,
+        num_iter=10000,
         metropolis=True,
         beta_strategy=1.0,
         num_jobs=48,
@@ -95,7 +94,23 @@ if __name__ == "__main__":
     parser.add_argument('-o', dest='out_path', type=str, required=False,
                         default='memetracker-results.pk',
                         help="Experiment directory")
+    parser.add_argument('--aspr', dest='as_pr', type=float, required=False,
+                        default=None, help="Experiment directory")
+    parser.add_argument('--arpr', dest='ar_pr', type=float, required=False,
+                        default=None, help="Experiment directory")
+    parser.add_argument('--bspr', dest='bs_pr', type=float, required=False,
+                        default=None, help="Experiment directory")
+    parser.add_argument('--brpr', dest='br_pr', type=float, required=False,
+                        default=None, help="Experiment directory")
     args = parser.parse_args()
+
+    prior = {
+        'as_pr': args.as_pr or 10.0,
+        'ar_pr': args.ar_pr or 100.0,
+        'bs_pr': args.bs_pr or 101.0,
+        'br_pr': args.br_pr or 100.0
+    }
+
 
     # Load the dataset
     INPUT_PATH = "/root/workspace/var-wold/data/memetracker/memetracker-top100-clean.pickle.gz"
@@ -133,7 +148,7 @@ if __name__ == "__main__":
         print()
 
         # Run VI
-        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, chunk_idx, adjacency_true)
+        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, chunk_idx, adjacency_true, prior)
 
         # Run GB
         gb_ll, gb_coeffs_hat = run_gb(train_events, test_events, chunk_idx)
@@ -143,6 +158,7 @@ if __name__ == "__main__":
             'chunk_idx': chunk_idx,
             'chunk_total': chunk_total,
             'dim': len(nodelist),
+            'vi_prior': prior,
             'vi_ll': vi_ll,
             'vi_coeffs_hat': vi_coeffs_hat.numpy(),
             'gb_ll': gb_ll,

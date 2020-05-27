@@ -1,8 +1,10 @@
 from collections import defaultdict
+from collections import Counter
 from math import exp
 import gzip
 import pickle
 import numpy as np
+import pandas as pd
 import networkx as nx
 
 import tsvar
@@ -33,13 +35,11 @@ class Dataset:
         # Delete the original objects
         del timestamps
         del sources
-        # Sort the timestamps (if necessary) and move first event to origin
+        # Sort the timestamps and their source (if necessary)
         sargs = list(map(np.argsort, self.timestamps))  # argsort timestamps
-        # Sort the timestamps
         self.timestamps = [ev[s] for ev, s in zip(self.timestamps, sargs)]
-        # Sort the ground truth causal source of each event
         self.sources = [ev[s] for ev, s in zip(self.sources, sargs)]
-        # Move timestamp to origin
+        # Translate time axis to origin
         min_time = min(map(min, self.timestamps))
         self.timestamps = [ev - min_time for ev in self.timestamps]
         # Set dimension attribute
@@ -55,6 +55,7 @@ class Dataset:
         self.end_time = max(map(max, self.timestamps))
         # Set sparse adjacency matrix attribute
         self.graph = self._build_graph_with_indices(graph, ids)
+        self.graph_names = graph
         assert self.graph.number_of_nodes() == self.dim, "Something went wrong with ground truth graph"
         # Set name <-> idx mapping attributes
         self.name_to_idx = ids
@@ -194,3 +195,74 @@ class Dataset:
         assert digraph.number_of_nodes() == num_nodes
 
         return digraph
+
+
+class MemeTrackerDataset:
+
+    def __init__(self, path, timescale='busca'):
+        """
+        Load the MemeTracker dataset
+
+        Arguments:
+        ----------
+        path : str
+            Path to the preprocessed MemeTracker dataset. Expects a pickled and
+            gzipped `pandas` dataframe indexed by "Blog" name and with columns:
+            * "Timestamp": the lists of events
+            * "Hyperlink": the name of the corresponding source events
+            * "Blog_idx": numerical index of the Blog
+            * "Hyperlink_idx": list of numerical index of the source hyperlinks
+        """
+        self.data = pd.read_pickle(path)
+        for col in ["Timestamp", "Hyperlink", "Blog_idx", "Hyperlink_idx"]:
+            if col not in self.data.columns:
+                raise ValueError(f"DataFrame column `{col}` is missing")
+        self.dim = len(self.data)
+
+    def sample(self, start_time, end_time):
+        """
+        Sample a subset of the the dataset and split in train and test sets.
+        The training set contains all events in time window
+            [`train_start`, `train_end`),
+        and the test set contains all events in time window
+            [`train_end`, `test_end`).
+
+        Also compute the ground truth networks on both subsets of the data.
+
+        Arguments:
+        ----------
+        start_time : float
+            Start of the desired window
+        end_time : float
+            End of the desired window
+        """
+        mask = (self.data.Timestamp >= start_time) & (self.data.Timestamp < end_time)
+        df = self.data.loc[mask].groupby('Blog_idx').agg({'Timestamp': list, 'Hyperlink_idx': list}).sort_index()
+
+        # Format events as a dict of {blog_idx: array(events in blog)}
+        events = df.Timestamp.apply(np.array).to_dict()
+        events = {idx: ev - start_time for idx, ev in events.items()}
+
+        edge_data = self.data.loc[mask].groupby(['Hyperlink_idx', 'Blog_idx']).agg({'Timestamp': 'count'})['Timestamp'].to_dict()
+        edge_data = [(u, v, {'weight': w}) for (u, v), w in edge_data.items()]
+        graph = nx.DiGraph()
+        graph.add_nodes_from(events.keys())
+        graph.add_edges_from(edge_data)
+
+        return events, graph
+
+    def filter_nodes(self, events, graph, nodes_to_keep):
+        events = {idx: ev for idx, ev in events.items() if idx in nodes_to_keep}
+        graph = graph.subgraph(nodes_to_keep)
+        return events, graph
+
+    def build_train_test(self, train_start, train_end, test_end):
+        # Sample both observation windows
+        train_events, train_graph = self.sample(train_start, train_end)
+        test_events, test_graph = self.sample(train_end, test_end)
+        # Keep only nodes with events in both sets
+        nodes_to_keep = set(train_events.keys()).intersection(set(test_events.keys()))
+        # Filter out nodes with no data
+        train_events, train_graph = self.filter_nodes(train_events, train_graph, nodes_to_keep)
+        test_events, test_graph = self.filter_nodes(test_events, test_graph, nodes_to_keep)
+        return train_events, train_graph, test_events, test_graph

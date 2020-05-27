@@ -23,20 +23,38 @@ def run_vi(train_events, test_events, chunk_idx, adjacency_true, prior):
     vi_model = tsvar.models.WoldModelVariationalOther(verbose=True)
     vi_model.observe(train_events)
 
-    # Set callback (parameters of callback are just the posterior mean of alpha)
-    callback = tsvar.utils.callbacks.LearnerCallbackMLE(
+    # Init the test model
+    test_model = tsvar.models.WoldModelOther()
+    test_model.observe(test_events)
+
+    class MyCallback(tsvar.utils.callbacks.LearnerCallbackMLE):
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def __call__(self, learner_obj, end=None, force=False):
+            super().__call__(learner_obj, end, force)
+            t = learner_obj._n_iter_done + 1
+            if (t % self.print_every == 0) or force:
+                # Extract mean of posteriors
+                mu_hat = learner_obj._as_po[0, :] / learner_obj._ar_po[0, :]
+                adj_hat = learner_obj._as_po[1:, :] / learner_obj._ar_po[1:, :]
+                beta_hat = learner_obj._br_po[:, :] / (learner_obj._bs_po[:, :] + 1) + 1
+                coeffs_hat = torch.tensor(np.hstack((
+                    mu_hat, beta_hat.flatten(), adj_hat.flatten()
+                )))
+                loglik = float(test_model.log_likelihood(coeffs_hat)) / sum(map(len, test_events))
+                print(f'vi_ll: {loglik:.2f}')
+
+    callback = MyCallback(
         x0=(as_pr[1:, :] / ar_pr[1:, :]).flatten(), print_every=1,
-        coeffs_true=adjacency_true.flatten(), acc_thresh=0.05, dim=dim,
+        coeffs_true=adjacency_true, acc_thresh=0.05, dim=dim,
         widgets={'f1score', 'relerr', 'prec@5', 'prec@10', 'prec@20'},
         default_end='\n')
 
     # Fit model
     vi_model.fit(as_pr=as_pr, ar_pr=ar_pr, bs_pr=bs_pr, br_pr=br_pr, zc_pr=zc_pr,
                  max_iter=20, tol=1e-5, callback=callback)
-
-    # Init the test model
-    test_model = tsvar.models.WoldModelOther()
-    test_model.observe(test_events)
 
     # Extract mean of posteriors
     mu_hat = vi_model._as_po[0, :] / vi_model._ar_po[0, :]

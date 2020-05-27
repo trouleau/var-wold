@@ -134,8 +134,7 @@ class WoldModelOther(Model):
         log_like = 0
         for i in range(self.dim):
             # Compute the intensity at each event
-            lam_ik_arr = mu[i] + torch.sum(
-                self.valid_mask_ikj[i] * alpha[:, i] / (
+            lam_ik_arr = mu[i] + torch.sum(alpha[:, i] / (
                     beta[:, i] + 1 + self.delta_ikj[i]), axis=1)
             # Add the log-intensity term (ignore the last 'fake' event)
             log_like += lam_ik_arr[:-1].log().sum()

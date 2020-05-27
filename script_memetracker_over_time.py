@@ -131,8 +131,8 @@ if __name__ == "__main__":
         print()
 
         train_start = t0 + (t1 - t0) * chunk_idx / chunk_total
-        train_end = t0 + (t1 - t0) * chunk_idx / chunk_total
-        test_end = t0 + (t1 - t0) * chunk_idx / chunk_total
+        train_end = t0 + (t1 - t0) * (chunk_idx + 1) / chunk_total
+        test_end = t0 + (t1 - t0) * (chunk_idx + 2) / chunk_total
 
         # Extract train/test sets for this chunk
         train_events, train_graph, test_events, test_graph = dataset.build_train_test(train_start, train_end, test_end)

@@ -17,7 +17,6 @@ def _wold_model_init_cache(events):
     dim = len(events)
     n_jumps = [len(events[i]) for i in range(dim)]
     delta_ikj = [np.zeros((n_jumps[i], dim)) for i in range(dim)]
-    valid_mask_ikj = [np.ones((n_jumps[i], dim), dtype=np.bool_) for i in range(dim)]
     # For each reiceiving dimension
     for i in range(dim):
         last_idx_tlj = [-1 for j in range(dim)]
@@ -28,7 +27,6 @@ def _wold_model_init_cache(events):
             if k == 0:
                 # Delta should be ignored for the first event.
                 # Mark has invalid
-                valid_mask_ikj[i][k, :] = 1
                 delta_ikj[i][k, :] = events[i][0]
                 continue
             last_tki = events[i][k-1]
@@ -37,7 +35,6 @@ def _wold_model_init_cache(events):
                 if (last_idx_tlj[j] < 0) and (events[j][0] >= last_tki):
                     # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
                     # Mark as invalid
-                    valid_mask_ikj[i][k, j] = 1
                     delta_ikj[i][k, :] = events[i][0]
                     continue
                 # Update last index for dim `j`
@@ -51,7 +48,7 @@ def _wold_model_init_cache(events):
                 # Set delta_ikj
                 delta_ikj[i][k, j] = last_tki - events[j][l]
         last_tki = tki
-    return delta_ikj, valid_mask_ikj
+    return delta_ikj
 
 
 class WoldModelOther(Model):
@@ -104,13 +101,10 @@ class WoldModelOther(Model):
     def _init_cache(self):
         events_ = [ev.numpy() for ev in self.events]
         # Compute cache with numba
-        self.delta_ikj, self.valid_mask_ikj = _wold_model_init_cache(events_)
+        self.delta_ikj = _wold_model_init_cache(events_)
         # Cast numpy output to torch
         self.delta_ikj = [torch.tensor(
             self.delta_ikj[i], dtype=torch.float, device=self.device)
-            for i in range(self.dim)]
-        self.valid_mask_ikj = [torch.tensor(
-            self.valid_mask_ikj[i], dtype=torch.float, device=self.device)
             for i in range(self.dim)]
         self._observed = True
 
@@ -152,19 +146,7 @@ class WoldModelOther(Model):
         return log_like
 
 
-class WoldModelMLE(WoldModel, FitterSGD):
-    """Wold Model with Maximum Likelihoof Estimation fitter"""
-
-    @enforce_observed
-    def mle_objective(self, coeffs):
-        """Objectvie function for MLE: Averaged negative log-likelihood"""
-        return -1.0 * self.log_likelihood(coeffs) / sum(self.n_jumps)
-
-    def fit(self, *args, **kwargs):
-        return super().fit(objective_func=self.mle_objective, *args, **kwargs)
-
-
-class WoldModelBetaJ_MLE(WoldModelBetaJ, FitterSGD):
+class WoldModelMLE(WoldModelOther, FitterSGD):
     """Wold Model with Maximum Likelihoof Estimation fitter"""
 
     @enforce_observed

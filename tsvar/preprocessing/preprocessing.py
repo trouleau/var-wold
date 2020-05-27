@@ -199,7 +199,7 @@ class Dataset:
 
 class MemeTrackerDataset:
 
-    def __init__(self, path, timescale='busca'):
+    def __init__(self, path):
         """
         Load the MemeTracker dataset
 

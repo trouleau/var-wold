@@ -119,6 +119,8 @@ if __name__ == "__main__":
 
     # Number of chunks to use
     chunk_total = 20
+    t0 = dataset.data.Timestamp.min()
+    t1 = dataset.data.Timestamp.max()
 
     res = list()
 
@@ -127,6 +129,10 @@ if __name__ == "__main__":
         print()
         print('-' * 20, f'Start chunk {chunk_idx}')
         print()
+
+        train_start = t0 + (t1 - t0) * chunk_idx / chunk_total
+        train_end = t0 + (t1 - t0) * chunk_idx / chunk_total
+        test_end = t0 + (t1 - t0) * chunk_idx / chunk_total
 
         # Extract train/test sets for this chunk
         train_events, train_graph, test_events, test_graph = dataset.build_train_test(train_start, train_end, test_end)

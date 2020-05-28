@@ -8,7 +8,7 @@ import gb
 import tsvar
 
 
-def run_vi(train_events, test_events, chunk_idx, adjacency_true, prior):
+def run_vi(train_events, test_events, adjacency_true, prior):
     dim = len(train_events)
     # Set prior: Alpha
     as_pr = prior['as_pr'] * np.ones((dim + 1, dim))
@@ -67,12 +67,10 @@ def run_vi(train_events, test_events, chunk_idx, adjacency_true, prior):
     # Compute heldout log-likelihood on test set
     vi_ll = float(test_model.log_likelihood(coeffs_hat)) / sum(map(len, test_events))
 
-    print(f'Result VI: chunk={chunk_idx:d} ll_mean={vi_ll:.4f}')
-
     return vi_ll, coeffs_hat
 
 
-def run_gb(train_events, test_events, chunk_idx):
+def run_gb(train_events, test_events):
     # Define model
     granger_model = gb.GrangerBusca(
         alpha_prior=1.0/len(train_events),
@@ -101,8 +99,6 @@ def run_gb(train_events, test_events, chunk_idx):
 
     # Compute heldout log-likelihood on test set
     gb_ll = float(test_model.log_likelihood(coeffs_hat)) / sum(map(len, test_events))
-
-    print(f'Result GB: chunk={chunk_idx:d} ll={gb_ll:.4f}')
 
     return gb_ll, coeffs_hat
 
@@ -172,12 +168,20 @@ if __name__ == "__main__":
         print()
 
         # Run VI
-        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, chunk_idx, adjacency_true, prior)
+        print()
+        print('--- VI')
+        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, adjacency_true, prior)
+        print(f'Result VI: chunk={chunk_idx:d} ll_mean={vi_ll:.4f}')
 
         # Run GB
-        gb_ll, gb_coeffs_hat = run_gb(train_events, test_events, chunk_idx)
+        print()
+        print('--- GB')
+        gb_ll, gb_coeffs_hat = run_gb(train_events, test_events)
+        print(f'Result GB: chunk={chunk_idx:d} ll={gb_ll:.4f}')
 
         # Store result
+        print()
+        print('Save results...')
         res.append({
             'chunk_idx': chunk_idx,
             'chunk_total': chunk_total,

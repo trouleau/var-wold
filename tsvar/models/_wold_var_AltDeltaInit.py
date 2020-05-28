@@ -9,7 +9,7 @@ from ..utils.decorators import enforce_observed
 from ..fitter import FitterIterativeNumpy
 
 
-MOMENT_ORDER = 5  # Moment of equation to solve for beta update
+MOMENT_ORDER = 1.7  # Moment of equation to solve for beta update
 EPS = 1e-8  # Finite-difference gradient epsilon
 
 
@@ -234,7 +234,7 @@ def _update_beta(*, as_po, ar_po, zp_po, bs_pr, br_pr, dt_ik, delta_ikj):
                                     delta=delta_ikj)
             if xn[j, i] < 0:
                 print('Beta optim failed for xn, switch to bin search')
-                x0[j, i] = solve_binary_search(
+                xn[j, i] = solve_binary_search(
                     x_min=0.01, x_max=200.0,
                     max_iter=20, tol=1e-2,
                     j=j, i=i, n=MOMENT_ORDER,
@@ -243,8 +243,8 @@ def _update_beta(*, as_po, ar_po, zp_po, bs_pr, br_pr, dt_ik, delta_ikj):
                     zp_po=zp_po,
                     dts=dt_ik,
                     delta=delta_ikj)
-    bs_po = MOMENT_ORDER * xn / (xn - x0) - 1
-    br_po = MOMENT_ORDER * xn * x0 / (xn - x0)
+    bs_po = MOMENT_ORDER * xn / (xn - x0 + 1e-10) - 1
+    br_po = MOMENT_ORDER * xn * x0 / (xn - x0 + 1e-10)
     return bs_po, br_po, x0, xn
 
 
@@ -351,6 +351,13 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
         #print(f'    bs: min:{self._bs_po.min():+.2e}, max:{self._bs_po.max():+.2e}')
         #print(f'    br: min:{self._br_po.min():+.2e}, max:{self._br_po.max():+.2e}')
         b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
+        # Deal with numerical instability
+        if (self._bs_po.min() <= 0) and (self._bs_po.min() + 1e-3 > 0):
+            self._bs_po[self._bs_po < 0] = 1e-5
+        if (self._br_po.min() <= 0) and (self._br_po.min() + 1e-3 > 0):
+            self._br_po[self._br_po < 0] = 1e-5
+
+                
         print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
         # (debug) Sanity check
         if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():

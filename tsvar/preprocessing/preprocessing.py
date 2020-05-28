@@ -237,13 +237,13 @@ class MemeTrackerDataset:
             End of the desired window
         """
         mask = (self.data.Timestamp >= start_time) & (self.data.Timestamp < end_time)
-        df = self.data.loc[mask].groupby('Blog_idx').agg({'Timestamp': list, 'Hyperlink_idx': list}).sort_index()
+        df = self.data.loc[mask].groupby('Blog').agg({'Timestamp': list, 'Hyperlink': list}).sort_index()
 
         # Format events as a dict of {blog_idx: array(events in blog)}
         events = df.Timestamp.apply(np.array).to_dict()
         events = {idx: ev - start_time for idx, ev in events.items()}
 
-        edge_data = self.data.loc[mask].groupby(['Hyperlink_idx', 'Blog_idx']).agg({'Timestamp': 'count'})['Timestamp'].to_dict()
+        edge_data = self.data.loc[mask].groupby(['Hyperlink', 'Blog']).agg({'Timestamp': 'count'})['Timestamp'].to_dict()
         edge_data = [(u, v, {'weight': w}) for (u, v), w in edge_data.items()]
         graph = nx.DiGraph()
         graph.add_nodes_from(events.keys())

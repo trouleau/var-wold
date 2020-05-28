@@ -331,8 +331,8 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
         #print('---- Alpha')
         #print(f'    as: min:{self._as_po.min():+.2e}, max:{self._as_po.max():+.2e}')
         #print(f'    ar: min:{self._ar_po.min():+.2e}, max:{self._ar_po.max():+.2e}')
-        a_mean = self._as_po / self._ar_po
-        print(f'a_mean: min:{a_mean.min():+.2e}, max:{a_mean.max():+.2e}')
+        #a_mean = self._as_po / self._ar_po
+        #print(f'a_mean: min:{a_mean.min():+.2e}, max:{a_mean.max():+.2e}')
         # (debug) Sanity check
         if np.isnan(self._as_po).any() or np.isnan(self._ar_po).any():
             raise RuntimeError("NaNs in Alpha parameters")
@@ -350,15 +350,13 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
         #print(f'    xn: min:{self._b_xn.min():+.2e}, max:{self._b_xn.max():+.2e}')
         #print(f'    bs: min:{self._bs_po.min():+.2e}, max:{self._bs_po.max():+.2e}')
         #print(f'    br: min:{self._br_po.min():+.2e}, max:{self._br_po.max():+.2e}')
-        b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
+        #b_mean = self._br_po / (self._bs_po - 1) * (self._bs_po > 1)
         # Deal with numerical instability
         if (self._bs_po.min() <= 0) and (self._bs_po.min() + 1e-3 > 0):
             self._bs_po[self._bs_po < 0] = 1e-5
         if (self._br_po.min() <= 0) and (self._br_po.min() + 1e-3 > 0):
-            self._br_po[self._br_po < 0] = 1e-5
-
-                
-        print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
+            self._br_po[self._br_po < 0] = 1e-5        
+        #print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
         # (debug) Sanity check
         if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():
             raise RuntimeError("NaNs in Beta parameters")

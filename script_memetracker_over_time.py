@@ -132,21 +132,20 @@ if __name__ == "__main__":
     dataset.data.Timestamp /= 426.3722723177017
 
     # Number of chunks to use
-    chunk_total = 20
     t0 = dataset.data.Timestamp.min()
     t1 = dataset.data.Timestamp.max()
 
     res = list()
 
-    for chunk_idx in range(chunk_total - 1):
+    for chunk_idx, chunk_start in enumerate(np.arange(0, 1.0 - 0.05 - 0.02, 0.05)):
 
         print()
         print('-' * 20, f'Start chunk {chunk_idx}')
         print()
 
-        train_start = t0 + (t1 - t0) * chunk_idx / chunk_total
-        train_end = t0 + (t1 - t0) * (chunk_idx + 1) / chunk_total
-        test_end = t0 + (t1 - t0) * (chunk_idx + 2) / chunk_total
+        train_start = t0 + (t1 - t0) * chunk_start
+        train_end = t0 + (t1 - t0) * (chunk_start + 0.05)
+        test_end = t0 + (t1 - t0) * (chunk_start + 0.05 + 0.02)
 
         # Extract train/test sets for this chunk
         train_events, train_graph, test_events, test_graph = dataset.build_train_test(train_start, train_end, test_end)
@@ -170,13 +169,13 @@ if __name__ == "__main__":
         # Run VI
         print()
         print('--- VI')
-        vi_ll, vi_coeffs_hat = run_vi(train_events, test_events, adjacency_true, prior)
+        vi_ll, vi_model = run_vi(train_events, test_events, adjacency_true, prior)
         print(f'Result VI: chunk={chunk_idx:d} ll_mean={vi_ll:.4f}')
 
         # Run GB
         print()
         print('--- GB')
-        gb_ll, gb_coeffs_hat = run_gb(train_events, test_events)
+        gb_ll, gb_model = run_gb(train_events, test_events)
         print(f'Result GB: chunk={chunk_idx:d} ll={gb_ll:.4f}')
 
         # Store result
@@ -184,17 +183,17 @@ if __name__ == "__main__":
         print('Save results...')
         res.append({
             'chunk_idx': chunk_idx,
-            'chunk_total': chunk_total,
+            'chunk_start': chunk_start,
             'dim': len(nodelist),
             'vi_prior': prior,
             'vi_ll': vi_ll,
-            'vi_coeffs_hat': vi_coeffs_hat.numpy(),
+            'vi_model': vi_model,
             'gb_ll': gb_ll,
-            'gb_coeffs_hat': gb_coeffs_hat.numpy()
+            'gb_model': gb_model,
         })
 
+        # Save the results
+        with open(args.out_path, 'wb') as f:
+            pickle.dump(res, f)
+        
         print('=' * 50)
-
-    # Save the results
-    with open(args.outpath, 'wb') as f:
-        pickle.dump(res, f)

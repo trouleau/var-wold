@@ -1,4 +1,4 @@
-for n in {1000,1802,3246,5848,10536,18982,34200,61616,111009,200000}
+for n in {499,753,1134,1709,2576,3881,5848,8810,13274,20000}
 do
-    python script_make_job.py -e output/dataRegimes-n10/ -d 10 -n $n -g 10 -s 5
+    python script_make_job.py -e output/dataRegimes-n10-2/ -d 10 -n $n -g 5 -s 4
 done

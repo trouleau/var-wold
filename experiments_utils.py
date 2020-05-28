@@ -84,7 +84,7 @@ def generate_data(baseline, beta, adjacency, max_jumps, sim_seed=None):
     if sim_seed is None:
         sim_seed = np.random.randint(2**31 - 1)
     # Simulate a realization
-    wold_sim = tsvar.simulate.MultivariateWoldSimulator(
+    wold_sim = tsvar.simulate.MultivariateWoldSimulatorOther(
         mu_a=baseline, alpha_ba=adjacency, beta_ba=beta)
     events = wold_sim.simulate(max_jumps=max_jumps, seed=sim_seed)
     events = [torch.tensor(ev, dtype=torch.float) for ev in events]
@@ -286,7 +286,7 @@ def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed, prior_dict=None)
 def run_vi(events, end_time, coeffs_true_dict, seed):
     dim = len(events)
     # Set model
-    model = tsvar.models.WoldModelVariational(verbose=True)
+    model = tsvar.models.WoldModelVariationalOther(verbose=True)
     model.observe(events)
     # Set priors
     # prior: Alpha
@@ -304,6 +304,7 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
         x0=coeffs_start, print_every=PRINT_EVERY_VI,
         coeffs_true=coeffs_true, acc_thresh=0.05, dim=dim,
+        conv_n=10, conv_threshold=1e-3,
         default_end=CALLBACK_END)
     # Fit model
     conv = model.fit(as_pr=as_pr, ar_pr=ar_pr, bs_pr=bs_pr, br_pr=br_pr,
@@ -390,6 +391,9 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     precat5 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=5)
     precat10 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=10)
     precat20 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=20)
+    precat50 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=50)
+    precat100 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=100)
+    precat200 = tsvar.utils.metrics.precision_at_n(adj_hat_flat, adj_true_flat, n=200)
     # Error counts
     tp = tsvar.utils.metrics.tp(adj_hat_flat, adj_true_flat, threshold=thresh)
     fp = tsvar.utils.metrics.fp(adj_hat_flat, adj_true_flat, threshold=thresh)
@@ -434,13 +438,16 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     print()
     print('Precision@k')
     print('-----------')
-    print(f" Prec@5: {precat5:.2f}")
-    print(f"Prec@10: {precat10:.2f}")
-    print(f"Prec@20: {precat20:.2f}")
+    print(f"  Prec@5: {precat5:.2f}")
+    print(f" Prec@10: {precat10:.2f}")
+    print(f" Prec@20: {precat20:.2f}")
+    print(f" Prec@50: {precat50:.2f}")
+    print(f"Prec@100: {precat100:.2f}")
+    print(f"Prec@200: {precat200:.2f}")
     print()
     print('Average Precision@k per node')
     print('----------------------------')
     print('AvgPrec@k per node:')
-    for k in [5, 10, 20]:
+    for k in [5, 10, 20, 50, 100, 200]:
         print(k, tsvar.utils.metrics.precision_at_n_per_dim(A_pred=adj_hat, A_true=adj_true, k=k))
     print(flush=True)

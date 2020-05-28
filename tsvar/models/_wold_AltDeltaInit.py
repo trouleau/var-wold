@@ -27,7 +27,7 @@ def _wold_model_init_cache(events):
             if k == 0:
                 # Delta should be ignored for the first event.
                 # Mark has invalid
-                delta_ikj[i][k, :] = events[i][0]
+                delta_ikj[i][k, :] = 0.0
                 continue
             last_tki = events[i][k-1]
             # For each incoming dimension
@@ -35,7 +35,7 @@ def _wold_model_init_cache(events):
                 if (last_idx_tlj[j] < 0) and (events[j][0] >= last_tki):
                     # If the 1st event in dim `j` comes after `last_tki`, it should be ignored.
                     # Mark as invalid
-                    delta_ikj[i][k, :] = events[i][0]
+                    delta_ikj[i][k, :] = 0.0
                     continue
                 # Update last index for dim `j`
                 l = max(last_idx_tlj[j], 0)

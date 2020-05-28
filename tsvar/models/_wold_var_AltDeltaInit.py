@@ -133,8 +133,10 @@ def solve_newton(xstart, max_iter, tol, j, i, n, bs_pr, br_pr, as_po, ar_po, zp_
                                dts, delta, return_fprime2=False)
         x_new = x - f / fp
         if abs(f) < tol:
+            # print('it', it+1)
             return x
         x = x_new
+    # print('it', it+1)
     return x
 
 
@@ -195,23 +197,23 @@ def _update_alpha(as_pr, ar_pr, zp_po, bs_po, br_po, delta_ikj, dt_ik, last_t):
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=PARALLEL, cache=CACHE)
-def _update_beta(*, as_po, ar_po, zp_po, bs_pr, br_pr, dt_ik, delta_ikj):
+def _update_beta(*, x0, xn, as_po, ar_po, zp_po, bs_pr, br_pr, dt_ik, delta_ikj):
     dim = as_po.shape[1]
     max_iter = 10
     tol = 1e-5
-    x0 = np.ones_like(bs_pr)
-    xn = np.ones_like(bs_pr)
+    # x0 = np.ones_like(bs_pr)
+    # xn = np.ones_like(bs_pr)
     for j in numba.prange(dim):
         for i in numba.prange(dim):
-            #x0[j, i] = solve_halley(xstart=float(x0[j, i]),
-            x0[j, i] = solve_newton(xstart=0.1,
-                                    max_iter=max_iter,
-                                    tol=tol, j=j, i=i, n=0,
-                                    bs_pr=bs_pr, br_pr=br_pr,
-                                    as_po=as_po, ar_po=ar_po,
-                                    zp_po=zp_po,
-                                    dts=dt_ik,
-                                    delta=delta_ikj)
+            x0[j, i] = solve_newton(
+                xstart=x0[j, i],  # xstart=0.1,
+                max_iter=max_iter,
+                tol=tol, j=j, i=i, n=0,
+                bs_pr=bs_pr, br_pr=br_pr,
+                as_po=as_po, ar_po=ar_po,
+                zp_po=zp_po,
+                dts=dt_ik,
+                delta=delta_ikj)
             if x0[j, i] < 0:
                 print('Beta optim failed for x0, swtich to bin search')
                 x0[j, i] = solve_binary_search(
@@ -223,15 +225,15 @@ def _update_beta(*, as_po, ar_po, zp_po, bs_pr, br_pr, dt_ik, delta_ikj):
                     zp_po=zp_po,
                     dts=dt_ik,
                     delta=delta_ikj)
-            #xn[j, i] = solve_halley(xstart=float(xn[j, i]),
-            xn[j, i] = solve_newton(xstart=0.1,
-                                    max_iter=max_iter,
-                                    tol=tol, j=j, i=i, n=MOMENT_ORDER,
-                                    bs_pr=bs_pr, br_pr=br_pr,
-                                    as_po=as_po, ar_po=ar_po,
-                                    zp_po=zp_po,
-                                    dts=dt_ik,
-                                    delta=delta_ikj)
+            xn[j, i] = solve_newton(
+                xstart=xn[j, i],  # xstart=0.1,
+                max_iter=max_iter,
+                tol=tol, j=j, i=i, n=MOMENT_ORDER,
+                bs_pr=bs_pr, br_pr=br_pr,
+                as_po=as_po, ar_po=ar_po,
+                zp_po=zp_po,
+                dts=dt_ik,
+                delta=delta_ikj)
             if xn[j, i] < 0:
                 print('Beta optim failed for xn, switch to bin search')
                 xn[j, i] = solve_binary_search(
@@ -341,6 +343,7 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
 
         # Update beta
         self._bs_po, self._br_po, self._b_x0, self._b_xn = _update_beta(
+            x0=self._b_x0, xn=self._b_xn,
             as_po=self._as_po, ar_po=self._ar_po, zp_po=self._zp_po,
             bs_pr=self._bs_pr, br_pr=self._br_pr, dt_ik=self.dt_ik,
             delta_ikj=self.delta_ikj)
@@ -355,7 +358,7 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
         if (self._bs_po.min() <= 0) and (self._bs_po.min() + 1e-3 > 0):
             self._bs_po[self._bs_po < 0] = 1e-5
         if (self._br_po.min() <= 0) and (self._br_po.min() + 1e-3 > 0):
-            self._br_po[self._br_po < 0] = 1e-5        
+            self._br_po[self._br_po < 0] = 1e-5
         #print(f'b_mean: min:{b_mean.min():+.2e}, max:{b_mean.max():+.2e}')
         # (debug) Sanity check
         if np.isnan(self._bs_po).any() or np.isnan(self._br_po).any():
@@ -378,7 +381,7 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
                                 delta_ikj=self.delta_ikj)
 
         # Set coeffs attribute for Fitter to assess convergence
-        self.coeffs = expect_alpha(as_po=self._as_po, ar_po=self._ar_po)[1:, :].flatten()
+        self.coeffs = self.alpha_posterior_mode()[1:, :].flatten()
 
     @enforce_observed
     def fit(self, as_pr, ar_pr, bs_pr, br_pr, zc_pr, *args, **kwargs):

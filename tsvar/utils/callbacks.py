@@ -46,10 +46,14 @@ class History:
 class LearnerCallbackMLE:
 
     def __init__(self, x0, print_every=10, coeffs_true=None, acc_thresh=None,
-                 dim=None, link_func=None, default_end="", widgets=None):
+                 dim=None, link_func=None, default_end="", widgets=None,
+                 conv_n=10, conv_threshold=1e-4):
         self.print_every = print_every
         self.default_end = default_end
         self.n_params = len(x0)
+
+        self.conv_n = conv_n
+        self.conv_threshold = conv_threshold
 
         if widgets is not None:
             self.widgets = widgets
@@ -179,12 +183,14 @@ class LearnerCallbackMLE:
         self.last_coeffs = coeffs
         self.last_loss = loss
 
-    def has_converged(self, metric='relerr', n=100, threhshold=1e-4):
+    def has_converged(self, metric='relerr', n=None, threshold=None):
+        n = n or self.conv_n
+        threshold = threshold or self.conv_threshold
         # NOTE: history must have enough elements for averaging
         if len(self.history) >= max(2, n):
             val = np.mean(np.abs(np.diff(self.history[metric][-n:])))
-            # print('-->', val)
-            if val < threhshold:
+            # print('-->', val, threshold)
+            if val < threshold:
                 return True
         return False
 

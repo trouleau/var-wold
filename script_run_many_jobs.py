@@ -109,6 +109,10 @@ if __name__ == "__main__":
                         required=False, help='Filter algorithms to work with')
     args = parser.parse_args()
 
+    if args.algo_filter is None:
+        args.algo_filter = ['mle', 'bbvi', 'vi', 'gb']
+    print('Algorithms to run:', args.algo_filter)
+
     # Pattern to extract list of parameter files
     search_pattern = os.path.join(args.exp_dir, '*', 'params.json')
 

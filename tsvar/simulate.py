@@ -3,6 +3,10 @@ import numpy as np
 
 import numba
 
+# FIXME: This is a trick to make `MultivariateWoldSimulatorOther` accessible from
+# `tsvar.simulate`
+from .simulate_AltInitDelta import MultivariateWoldSimulatorOther
+
 
 @numba.njit
 def _total_intensity(mu, adj, beta, delta, t):

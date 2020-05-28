@@ -47,7 +47,7 @@ def _simulate(mu, adj, beta, last, delta, start_t, start_n, max_t, max_n, seed=N
     return events, last, delta, t, n_jumps
 
 
-class MultivariateWoldSimulator(object):
+class MultivariateWoldSimulatorOther(object):
 
     def __init__(self, mu_a, alpha_ba, beta_ba):
         self.mu_a = np.asanyarray(mu_a)

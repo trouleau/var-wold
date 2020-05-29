@@ -44,7 +44,7 @@ def run_vi(train_events, test_events, adjacency_true, prior):
                     mu_hat, beta_hat.flatten(), adj_hat.flatten()
                 )))
                 loglik = float(test_model.log_likelihood(coeffs_hat)) / sum(map(len, test_events))
-                print(f'vi_ll: {loglik:.2f}')
+                print(f'------> vi_ll: {loglik:.2f}')
 
     callback = MyCallback(
         x0=(as_pr[1:, :] / ar_pr[1:, :]).flatten(), print_every=1,
@@ -67,17 +67,17 @@ def run_vi(train_events, test_events, adjacency_true, prior):
     # Compute heldout log-likelihood on test set
     vi_ll = float(test_model.log_likelihood(coeffs_hat)) / sum(map(len, test_events))
 
-    return vi_ll, coeffs_hat
+    return vi_ll, vi_model
 
 
 def run_gb(train_events, test_events):
     # Define model
     granger_model = gb.GrangerBusca(
         alpha_prior=1.0/len(train_events),
-        num_iter=10000,
+        num_iter=3000,
         metropolis=True,
         beta_strategy=1.0,
-        num_jobs=48,
+        num_jobs=10,
     )
 
     # Fit the model
@@ -100,7 +100,7 @@ def run_gb(train_events, test_events):
     # Compute heldout log-likelihood on test set
     gb_ll = float(test_model.log_likelihood(coeffs_hat)) / sum(map(len, test_events))
 
-    return gb_ll, coeffs_hat
+    return gb_ll, granger_model
 
 
 if __name__ == "__main__":
@@ -137,15 +137,16 @@ if __name__ == "__main__":
 
     res = list()
 
-    for chunk_idx, chunk_start in enumerate(np.arange(0, 1.0 - 0.05 - 0.02, 0.05)):
-
-        print()
-        print('-' * 20, f'Start chunk {chunk_idx}')
-        print()
+    for chunk_idx, chunk_start in enumerate(np.arange(0, 1.0 - 0.05 - 0.02, 0.02)):
 
         train_start = t0 + (t1 - t0) * chunk_start
         train_end = t0 + (t1 - t0) * (chunk_start + 0.05)
         test_end = t0 + (t1 - t0) * (chunk_start + 0.05 + 0.02)
+
+        print()
+        print('-' * 20, f'Start chunk {chunk_idx}')
+        print(f'- Train window: [{train_start:.2f}, {train_end:.2f}]')
+        print(f'- Test window: [{train_end:.2f}, {test_end:.2f}]')
 
         # Extract train/test sets for this chunk
         train_events, train_graph, test_events, test_graph = dataset.build_train_test(train_start, train_end, test_end)

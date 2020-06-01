@@ -70,8 +70,8 @@ def _process_vi(data):
     series['history'] = data['history']
     # Extract mean/model posterior for coeffs
     model = tsvar.models.WoldModelVariational()
-    series['adj_mode'] = model.alpha_posterior_mean(as_po=series['as_po'], ar_po=series['ar_po'])[1:,:]
-    series['adj_mean'] = model.alpha_posterior_mode(as_po=series['as_po'], ar_po=series['ar_po'])[1:,:]
+    series['adj_mean'] = model.alpha_posterior_mean(as_po=series['as_po'], ar_po=series['ar_po'])[1:, :]
+    series['adj_mode'] = model.alpha_posterior_mode(as_po=series['as_po'], ar_po=series['ar_po'])[1:, :]
     # Add prefix
     series = series.rename({col: 'vi_' + col for col in series.index})
     return series

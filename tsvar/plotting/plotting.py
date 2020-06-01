@@ -59,7 +59,7 @@ def make_perf(df, func, prefix, suf_col_dict, **kwargs):
     return col_list
 
 
-def get_runtime(row, start_idx=0, unit='sec'):
+def compute_runtime(row, start_idx=0, unit='sec', scale='lin'):
     if unit == 'sec':
         factor = 1
     elif unit == 'min':
@@ -71,8 +71,38 @@ def get_runtime(row, start_idx=0, unit='sec'):
     times = row['time'][start_idx:]
     if len(times) > 0:
         last_iter = row['iter'][-1]
-        return np.mean(times) * last_iter * factor
-    return np.nan
+        val = np.mean(times) * last_iter * factor
+        if scale == 'log':
+            val = np.log10(val)
+        return val
+    else:
+        return np.nan
+
+
+def make_runtime_col(df, suf_col_dict, **kwargs):
+    col_list = list()
+    for suf, _ in suf_col_dict.items():
+        history_col = f"{suf}_history"
+        runtime_col = f"runtime_{kwargs.get('scale')}_{suf}"
+        df[runtime_col] = df[history_col].apply(compute_runtime, **kwargs)
+        col_list.append(runtime_col)
+    return col_list
+
+
+def compute_num_iter(row):
+    return row['iter'][-1]
+
+
+def make_num_iter(df, suf_col_dict):
+    col_list = list()
+    for suf, _ in suf_col_dict.items():
+        history_col = f"{suf}_history"
+        runtime_col = f"num_iter_{suf}"
+        df[runtime_col] = df[history_col].apply(compute_num_iter)
+        col_list.append(runtime_col)
+    return col_list
+
+
 
 
 def make_plot_df(df, suf_col_dict, agg_col, threshold=THRESHOLD):
@@ -88,17 +118,27 @@ def make_plot_df(df, suf_col_dict, agg_col, threshold=THRESHOLD):
     cols_relerr = make_perf(df, metrics.relerr, prefix='relerr',
                             suf_col_dict=suf_col_dict)
 
-    col_precAt5 = make_perf(df, metrics.precision_at_n, prefix='precAt5',
-                            suf_col_dict=suf_col_dict, n=5)
-    col_precAt10 = make_perf(df, metrics.precision_at_n, prefix='precAt10',
-                             suf_col_dict=suf_col_dict, n=10)
-    col_precAt20 = make_perf(df, metrics.precision_at_n, prefix='precAt20',
-                             suf_col_dict=suf_col_dict, n=20)
+    col_precAt_list = list()
+    for n in [5, 10, 20, 50, 100, 200]:
+        col_precAt_list += make_perf(df, metrics.precision_at_n,
+                                     prefix=f'precAt{n}',
+                                     suf_col_dict=suf_col_dict, n=n)
 
-    # Make plotting df
-    required_cols = (cols_acc + cols_relerr + cols_f1score
-                     + col_precAt5 + col_precAt10 + col_precAt20
-                     + cols_fp + cols_fn + [agg_col])
-    agg_funcs = ['min', 'max', 'mean', 'std', 'count']
-    df_plot = df[required_cols].groupby(agg_col).agg(agg_funcs)
-    return df_plot
+    col_runtime_lin = make_runtime_col(df, suf_col_dict, start_idx=0, unit='min',
+                                       scale='lin')
+    col_runtime_log = make_runtime_col(df, suf_col_dict, start_idx=0, unit='min',
+                                       scale='log')
+
+    col_num_iter = make_num_iter(df, suf_col_dict)
+
+    if agg_col is None:
+        return df
+    else:
+        # Make plotting df
+        required_cols = (cols_acc + cols_relerr + cols_f1score
+                         + col_precAt_list + col_num_iter
+                         + col_runtime_lin + col_runtime_log
+                         + cols_fp + cols_fn + [agg_col])
+        agg_funcs = ['min', 'max', 'mean', 'std', 'count']
+        df_plot = df[required_cols].groupby(agg_col).agg(agg_funcs)
+        return df_plot

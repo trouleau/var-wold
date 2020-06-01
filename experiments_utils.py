@@ -28,7 +28,7 @@ PRINT_EVERY_VI = 10
 CALLBACK_END = '\n'
 
 
-def generate_parameters(dim, p=None, seed=None, base_range=[1e-4, 0.05],
+def generate_parameters(dim, p=None, seed=None, base_range=[0.01, 0.05],
                         adj_range=[0.1, 0.2], beta_range=[0.0, 1.0],
                         unit_adj_rows=False):
     """Generate a random set of parameters for a simulation.
@@ -83,15 +83,17 @@ def generate_data(baseline, beta, adjacency, max_jumps, sim_seed=None):
     # Set random seed (for reproducibility)
     if sim_seed is None:
         sim_seed = np.random.randint(2**31 - 1)
-    # Simulate a realization
-    wold_sim = tsvar.simulate.MultivariateWoldSimulatorOther(
-        mu_a=baseline, alpha_ba=adjacency, beta_ba=beta)
-    events = wold_sim.simulate(max_jumps=max_jumps, seed=sim_seed)
-    events = [torch.tensor(ev, dtype=torch.float) for ev in events]
-    end_time = wold_sim.end_time
-    # Ensure observations in every dimension
-    assert min(map(len, events)) > 0
-    return events, end_time, sim_seed
+    for _ in range(10):
+        # Simulate a realization
+        wold_sim = tsvar.simulate.MultivariateWoldSimulatorOther(
+            mu_a=baseline, alpha_ba=adjacency, beta_ba=beta)
+        events = wold_sim.simulate(max_jumps=max_jumps, seed=sim_seed)
+        events = [torch.tensor(ev, dtype=torch.float) for ev in events]
+        end_time = wold_sim.end_time
+        # Ensure observations in every dimension
+        if min(map(len, events)) > 0:
+            return events, end_time, sim_seed
+    raise RuntimeError('Failed to generate a realization with events in all dimensions')
 
 
 def coeffs_array_to_dict(coeffs_hat, n_base, n_beta, n_adj):
@@ -438,11 +440,11 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     print()
     print('Precision@k')
     print('-----------')
-    print(f"  Prec@5: {precat5:.2f}")
+    # print(f"  Prec@5: {precat5:.2f}")
     print(f" Prec@10: {precat10:.2f}")
-    print(f" Prec@20: {precat20:.2f}")
+    # print(f" Prec@20: {precat20:.2f}")
     print(f" Prec@50: {precat50:.2f}")
-    print(f"Prec@100: {precat100:.2f}")
+    # print(f"Prec@100: {precat100:.2f}")
     print(f"Prec@200: {precat200:.2f}")
     print()
     print('Average Precision@k per node')

@@ -398,4 +398,4 @@ class WoldModelVariationalOther(WoldModelOther, FitterIterativeNumpy):
         if (as_po is None) and (ar_po is None):
             as_po = self._as_po
             ar_po = self._ar_po
-        return (as_po >= 1) * (as_po - 1) / ar_po
+        return (as_po > 1) * (as_po - 1) / ar_po

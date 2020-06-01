@@ -43,6 +43,7 @@ def mean_kendall_rank_corr(adj_est, adj_true, return_vec=False):
 
 
 def precision_at_n(adj_test, adj_true, n):
+    assert (len(adj_test.shape) == 1) and (len(adj_true.shape) == 1), "Expect 1-dimensional arrays"
     sorted_args = np.argsort(adj_test)[::-1]
     return np.sum(adj_true[sorted_args][:n] > 0) / n
 

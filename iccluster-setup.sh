@@ -36,11 +36,8 @@ mkdir /root/workspace/
 cd /root/workspace/ && git clone git@github.com:trouleau/var-wold.git  # Add personal lib
 
 # Make virtualenv
-conda create -n env python=3.7
-conda activate env
+conda create -n env python=3.7 && conda activate env
 
 cd /root/workspace/var-wold/ && pip install -e .  # Install internal lib
-
-cd /root/workspace/var-wold/lib/granger-busca/ && pip install cython && pip install -e .  # Install gb
-
 cd /root/workspace/var-wold/ && pip install -r requirements.txt
+cd /root/workspace/var-wold/lib/granger-busca/ && pip install cython && pip install -e .  # Install gb

@@ -1,0 +1,13 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: var-wold
+  labels:
+    name: var-wold
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8888
+      name: jupyter
+  selector:
+    name: var-wold

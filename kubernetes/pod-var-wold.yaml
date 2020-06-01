@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: var-wold
+  labels:
+    name: var-wold
+spec:
+  hostIPC: true
+  containers:
+  - name: var-wold
+    image: ubuntu:18.04
+    ports:
+        - containerPort: 8888
+    command:
+    - sleep
+    - infinity
+    volumeMounts:
+        - mountPath: /data
+          name: data
+          subPath: trouleau
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: indy1-scratch-tmp

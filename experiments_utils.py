@@ -407,6 +407,14 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     tnr = tsvar.utils.metrics.tnr(adj_hat_flat, adj_true_flat, threshold=thresh)
     fnr = tsvar.utils.metrics.fnr(adj_hat_flat, adj_true_flat, threshold=thresh)
 
+    res_dict = {
+        'accuracy': acc, 'precision': prec, 'recall': rec, 'f1score': fsc,
+        'prec@5': precat5, 'prec@10': precat10, 'prec@20': precat20,
+        'prec@50': precat50, 'prec@100': precat100, 'prec@200': precat200,
+        'tp': tp, 'fp': fp, 'tn': tn, 'fn': fn,
+        'tpr': tpr, 'fpr': fpr, 'tnr': tnr, 'fnr': fnr,
+    }
+
     print()
     print('='*50)
     print(f'========== Method: {name}')
@@ -453,3 +461,5 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     for k in [5, 10, 20, 50, 100, 200]:
         print(k, tsvar.utils.metrics.precision_at_n_per_dim(A_pred=adj_hat, A_true=adj_true, k=k))
     print(flush=True)
+
+    return res_dict

@@ -103,8 +103,6 @@ def make_num_iter(df, suf_col_dict):
     return col_list
 
 
-
-
 def make_plot_df(df, suf_col_dict, agg_col, threshold=THRESHOLD):
     # Compute all desired performance metrices
     cols_acc = make_perf(df, metrics.accuracy, prefix='acc',

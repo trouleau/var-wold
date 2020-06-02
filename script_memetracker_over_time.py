@@ -73,7 +73,7 @@ def run_vi(train_events, test_events, adjacency_true, prior):
 def run_gb(train_events, test_events):
     # Define model
     granger_model = gb.GrangerBusca(
-        alpha_prior=1.0/len(train_events),
+        alpha_prior=10.0,
         num_iter=3000,
         metropolis=True,
         beta_strategy=1.0,
@@ -196,5 +196,5 @@ if __name__ == "__main__":
         # Save the results
         with open(args.out_path, 'wb') as f:
             pickle.dump(res, f)
-        
+
         print('=' * 50)

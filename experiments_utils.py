@@ -129,7 +129,7 @@ def run_mle(events, end_time, coeffs_true_dict, seed):
                              np.array(coeffs_true_dict['beta']).flatten(),
                              np.array(coeffs_true_dict['adjacency']).flatten()))
     # Define model
-    model = tsvar.models.WoldModelMLE(verbose=True)
+    model = tsvar.models.WoldModelMLEOther(verbose=True)
     model.observe(events, end_time)
     # Set callback
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(

@@ -145,7 +145,7 @@ class WoldModelOther(Model):
         return log_like
 
 
-class WoldModelMLE(WoldModelOther, FitterSGD):
+class WoldModelMLEOther(WoldModelOther, FitterSGD):
     """Wold Model with Maximum Likelihoof Estimation fitter"""
 
     @enforce_observed

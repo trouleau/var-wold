@@ -113,7 +113,7 @@ def coeffs_array_to_dict(coeffs_hat, n_base, n_beta, n_adj):
     return coeffs_dict
 
 
-def run_mle(events, end_time, coeffs_true_dict, seed):
+def run_mle(events, end_time, coeffs_true_dict, seed, model_type=tsvar.models.WoldModelMLE):
     dim = len(events)
     # set random seed
     np.random.seed(seed)
@@ -129,7 +129,7 @@ def run_mle(events, end_time, coeffs_true_dict, seed):
                              np.array(coeffs_true_dict['beta']).flatten(),
                              np.array(coeffs_true_dict['adjacency']).flatten()))
     # Define model
-    model = tsvar.models.WoldModelMLEOther(verbose=True)
+    model = model_type(verbose=True)
     model.observe(events, end_time)
     # Set callback
     callback = tsvar.utils.callbacks.LearnerCallbackMLE(
@@ -154,6 +154,11 @@ def run_mle(events, end_time, coeffs_true_dict, seed):
     res_dict['conv'] = conv
     res_dict['history'] = callback.to_dict()
     return res_dict
+
+
+def run_mle_other(events, end_time, coeffs_true_dict, seed):
+    return run_mle(events, end_time, coeffs_true_dict, seed,
+                   model_type=tsvar.models.WoldModelMLEOther)
 
 
 def run_bbvi(events, end_time, coeffs_true_dict, seed):

@@ -10,7 +10,7 @@ import os
 
 import torch
 
-from experiments_utils import (generate_data, run_mle, run_bbvi,
+from experiments_utils import (generate_data, run_mle, run_mle_other, run_bbvi,
                                run_vi_fixed_beta, run_vi, run_gb)
 
 
@@ -54,6 +54,14 @@ def run_single_job(param_fname, out_fname, sim_idx, algo_filter, stdout=None, st
         print('Run MLE')
         print('-------')
         res_dict['mle'] = run_mle(events, end_time, param_dict, seed=sim_seed)
+        print()
+        print('-'*80, flush=True)
+
+    if 'mle-other' in algo_filter:
+        print()
+        print('Run MLE')
+        print('-------')
+        res_dict['mle'] = run_mle_other(events, end_time, param_dict, seed=sim_seed)
         print()
         print('-'*80, flush=True)
 
@@ -110,7 +118,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.algo_filter is None:
-        args.algo_filter = ['mle', 'bbvi', 'vi', 'gb']
+        args.algo_filter = ['mle-other', 'bbvi', 'vi', 'gb']
     print('Algorithms to run:', args.algo_filter)
 
     # Pattern to extract list of parameter files

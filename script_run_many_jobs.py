@@ -59,8 +59,8 @@ def run_single_job(param_fname, out_fname, sim_idx, algo_filter, stdout=None, st
 
     if 'mle-other' in algo_filter:
         print()
-        print('Run MLE')
-        print('-------')
+        print('Run MLE-OTHER')
+        print('-------------')
         res_dict['mle-other'] = run_mle_other(events, end_time, param_dict, seed=sim_seed)
         print()
         print('-'*80, flush=True)

@@ -68,7 +68,7 @@ echo "### Clone project source repos"
 echo "### --------------------------"
 echo ""
 
-cd /root/ && git clone git@github.com:trouleau/var-wold.git  # Add personal lib
+cd /root/ && git clone -y git@github.com:trouleau/var-wold.git  # Add personal lib
 
 # Make virtualenv
 echo ""
@@ -81,9 +81,9 @@ echo ""
 conda create -y -n env python=3.7
 
 # Install libs
-cd /root/var-wold/ && pip install -e .  # Install internal lib
-cd /root/var-wold/ && pip install -r requirements.txt
-cd /root/var-wold/lib/granger-busca/ && pip install cython && pip install -e .  # Install gb
+conda activate env && cd /root/var-wold/ && pip install -e .  # Install internal lib
+conda activate env && cd /root/var-wold/ && pip install -r requirements.txt
+conda activate env && cd /root/var-wold/lib/granger-busca/ && pip install cython && pip install -e .  # Install gb
 
 # Make output directory
 mkdir /root/var-wold/output/
@@ -106,25 +106,3 @@ c.NotebookApp.port = 2636" >> ~/.jupyter/jupyter_notebook_config.py
 
 # Setup backup output to icsil1-access1
 (crontab -l; echo "5,15,25,35,45,55 * * * * rsync -rav /root/var-wold/output trouleau@icsil1-access1.epfl.ch:/dfs/ephemeral/storage/trouleau/var-wold/ >> /root/cron.log 2>&1") | crontab -
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Clone project source repos
-cd /root/workspace/ && git clone git@github.com:trouleau/var-wold.git  # Add personal lib
-
-# Make virtualenv
-conda create -n env python=3.7 && conda activate env
-
-cd /root/workspace/var-wold/ && pip install -e .  # Install internal lib
-cd /root/workspace/var-wold/ && pip install -r requirements.txt
-cd /root/workspace/var-wold/lib/granger-busca/ && pip install cython && pip install -e .  # Install gb

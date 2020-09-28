@@ -1,5 +1,4 @@
 from collections import defaultdict
-from collections import Counter
 from math import exp
 import gzip
 import pickle
@@ -7,7 +6,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-import tsvar
+from ..models import WoldModel
 
 
 class Dataset:
@@ -45,7 +44,7 @@ class Dataset:
         # Set dimension attribute
         self.dim = len(self.timestamps)
         # Rescale time
-        if timescale == 'median':
+        if timescale == 'busca':
             timescale = self._compute_median_timescale(self.timestamps)
         elif not (isinstance(timescale, (int, float)) and (timescale > 0)):
             raise ValueError('`timescale should be a positive number`')
@@ -95,7 +94,7 @@ class Dataset:
     def _compute_median_timescale(self, timestamps, return_busca_betas=True):
         """Compute the time scale leading to unit median inter-arrival time"""
         # Compute the inter-arrival times
-        wmod = tsvar.models.WoldModel()
+        wmod = WoldModel()
         wmod.observe(timestamps)
         # Compute the median inter-event time accross all events
         median_delta = np.median(np.hstack(map(np.ravel, wmod.delta_ikj)))

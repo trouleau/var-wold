@@ -13,8 +13,8 @@ np.seterr(under='ignore')
 np.set_printoptions(precision=2, floatmode='fixed', sign=' ')
 
 
-MLE_N_ITER = 20000
-BBVI_N_ITER = 20000
+MLE_N_ITER = 10000
+BBVI_N_ITER = 10000
 
 VI_FB_N_ITER = 3000
 VI_N_ITER = 3000

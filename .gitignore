@@ -4,7 +4,16 @@ output/
 *.pk
 *.pkl
 *.pickle
-
+*.pdf
+*.pk.zip
+# Data
+*.txt
+*.txt.gz
+*.csv
+*.csv.gz
+*.tar.gz
+*.pickle.gz
+*.csv.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -30,6 +30,8 @@ find ./dim* -maxdepth 0 | sort -R | xargs -n1 sh -c 'condor_submit $1/script.con
 rsync -rav --exclude='stdout-*' --exclude='stderr-*' root@iccluster069.iccluster.epfl.ch:<EXPERIMENT_FOLDER> .
 
 
+find . -name '.DS_Store' -type f -delete.
+
 # ==============================================================================
 
 rsync -rav --exclude='stdout-*' --exclude='stderr-*' root@iccluster097.iccluster.epfl.ch:/root/workspace/var-wold/output/dimRegime-1/ .

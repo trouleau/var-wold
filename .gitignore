@@ -1,5 +1,10 @@
 # Experiments output dirs
 output/
+# Experiments outputs
+*.pk
+*.pkl
+*.pickle
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

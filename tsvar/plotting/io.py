@@ -33,14 +33,14 @@ def _extract_param_df(exp_dir):
     return param_df
 
 
-def _process_mle(data):
+def _process_mle(data, prefix='mle'):
     """Process the output of a MLE run"""
     series = pd.Series(data['coeffs']).apply(np.array)
     series['conv'] = data['conv']
     series['history'] = data['history']
     series['num_iter'] = data['history']['iter'][-1]
     # Add prefix
-    series = series.rename({col: 'mle_' + col for col in series.index})
+    series = series.rename({col: prefix + '_' + col for col in series.index})
     return series
 
 
@@ -114,7 +114,10 @@ def _process_output_file(output_fname, param_df):
     print(f"Process file: {output_fname}...", end='\r', flush=True)
     for method, data in all_data.items():
         if method == 'mle':
-            s = _process_mle(data)
+            s = _process_mle(data, prefix='mle')
+            series_list.append(s)
+        if method == 'mle-other':
+            s = _process_mle(data, prefix='mle_other')
             series_list.append(s)
         if method == 'bbvi':
             s = _process_bbvi(data, dim=dim)

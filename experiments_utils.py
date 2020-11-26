@@ -20,7 +20,7 @@ BBVI_N_ITER = 10000
 
 VI_FB_N_ITER = 3000
 VI_N_ITER = 3000
-VI_TOL = 1e-4
+VI_TOL = 1e-3
 
 GB_N_ITER = 3000
 
@@ -352,7 +352,7 @@ def run_gb(events, end_time, coeffs_true_dict, seed):
         num_iter=GB_N_ITER,
         metropolis=True,
         beta_strategy='busca',
-        num_jobs=1,
+        num_jobs=None,
     )
     start_time = time.time()
     granger_model.fit(events)

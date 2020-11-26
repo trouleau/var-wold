@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import time
 
+import sklearn.metrics
+
 import gb
 
 import tsvar
@@ -18,10 +20,9 @@ BBVI_N_ITER = 10000
 
 VI_FB_N_ITER = 3000
 VI_N_ITER = 3000
+VI_TOL = 1e-4
 
 GB_N_ITER = 3000
-
-VI_TOL = 1e-4
 
 PRINT_EVERY = 100
 PRINT_EVERY_VI = 10
@@ -412,12 +413,16 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     tnr = tsvar.utils.metrics.tnr(adj_hat_flat, adj_true_flat, threshold=thresh)
     fnr = tsvar.utils.metrics.fnr(adj_hat_flat, adj_true_flat, threshold=thresh)
 
+    pr_auc = sklearn.metrics.average_precision_score(adj_true_flat > 0, adj_hat_flat)
+    roc_auc = sklearn.metrics.roc_auc_score(adj_true_flat > 0, adj_hat_flat)
+
     res_dict = {
         'accuracy': acc, 'precision': prec, 'recall': rec, 'f1score': fsc,
         'prec@5': precat5, 'prec@10': precat10, 'prec@20': precat20,
         'prec@50': precat50, 'prec@100': precat100, 'prec@200': precat200,
         'tp': tp, 'fp': fp, 'tn': tn, 'fn': fn,
         'tpr': tpr, 'fpr': fpr, 'tnr': tnr, 'fnr': fnr,
+        'pr_auc': pr_auc, 'roc_auc': roc_auc
     }
 
     print()
@@ -450,6 +455,8 @@ def print_report(name, adj_hat, adj_true, thresh=0.05):
     print(f" F1-Score: {fsc:.2f}")
     print(f"Precision: {prec:.2f}")
     print(f"   Recall: {rec:.2f}")
+    print(f"   PR-AUC: {pr_auc:.2f}")
+    print(f"  ROC-AUC: {roc_auc:.2f}")
     print()
     print('Precision@k')
     print('-----------')

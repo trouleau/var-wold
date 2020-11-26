@@ -33,7 +33,13 @@ if __name__ == "__main__":
                         action="store_true",
                         help="Normalize adjacency rows as in GrangerBusca")
 
+    parser.add_argument('--seed', dest='random_seed', type=int, required=False,
+                        default=None, help="Random seed for the job")
+
     args = parser.parse_args()
+
+    print(f'Set random seed for the job: {args.random_seed}')
+    np.random.seed(args.random_seed)
 
     print(f'Generate {args.num_graphs} sub-experiments,')
     print(f'with {args.num_sims} simulation seed each,')

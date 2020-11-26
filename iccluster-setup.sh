@@ -68,7 +68,7 @@ echo "### Clone project source repos"
 echo "### --------------------------"
 echo ""
 
-cd /root/ && git clone -y git@github.com:trouleau/var-wold.git  # Add personal lib
+cd /root/ && git clone git@github.com:trouleau/var-wold.git  # Add personal lib
 
 # Make virtualenv
 echo ""
@@ -91,8 +91,8 @@ mkdir /root/var-wold/output/
 # Setup jupyter config
 echo ""
 echo ""
-echo "### Make virtualenv `env`"
-echo "### ---------------------"
+echo "### Config jupyter"
+echo "### --------------"
 echo ""
 
 conda activate env \
@@ -105,4 +105,18 @@ c.NotebookApp.password = 'sha1:b66fca924c15:af4b00b51bc827689857e386d2304148029f
 c.NotebookApp.port = 2636" >> ~/.jupyter/jupyter_notebook_config.py
 
 # Setup backup output to icsil1-access1
-(crontab -l; echo "5,15,25,35,45,55 * * * * rsync -rav /root/var-wold/output trouleau@icsil1-access1.epfl.ch:/dfs/ephemeral/storage/trouleau/var-wold/ >> /root/cron.log 2>&1") | crontab -
+echo ""
+echo ""
+echo "### Config crontab"
+echo "### --------------"
+echo ""
+
+# Setup ssh config (ssh tunnel through icsil1-access)
+echo "
+Host icsil1-access1
+    User trouleau
+    HostName icsil1-access1.epfl.ch
+    ProxyCommand ssh trouleau@icsil1-access.epfl.ch nc %h %p 2> /dev/null" >> ~/.ssh/config
+
+# Setup cron job
+(crontab -l; echo "5,15,25,35,45,55 * * * * rsync -rav /root/noisy-mhp/output trouleau@icsil1-access1.epfl.ch:/dfs/ephemeral/storage/trouleau/noisy-mhp-cumulants/ >> /root/cron.log 2>&1") | crontab -

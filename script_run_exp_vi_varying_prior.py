@@ -19,7 +19,7 @@ from experiments_utils import (generate_data, run_mle, run_mle_other, run_bbvi,
 torch.set_num_threads(1)
 
 
-def build_prior_dict_arr(N):
+def build_prior_dict_arr(N=50):
     a_mean = 0.1 * np.ones(N)
     a_var = np.logspace(-2, 2, N)
     as_pr = a_mean ** 2 / a_var
@@ -30,9 +30,16 @@ def build_prior_dict_arr(N):
     bs_pr = b_mean ** 2 / b_var + 2
     br_pr = b_mean * (b_mean ** 2 / b_var + 1)
 
-    df = pd.DataFrame({'as_pr': as_pr, 'ar_pr': ar_pr,
-                       'bs_pr': bs_pr, 'br_pr': br_pr})
-    return df.to_dict('records')
+    prior_dict_list = list()
+
+    for i in range(N):
+        for j in range(N):
+            prior_dict_list.append({
+                'as_pr': as_pr[i], 'ar_pr': ar_pr[i],
+                'bs_pr': bs_pr[j], 'br_pr': br_pr[j],
+            })
+
+    return prior_dict_list
 
 
 PRIOR_DICT_ARR = build_prior_dict_arr(N=20)

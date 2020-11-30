@@ -58,7 +58,8 @@ def pre_run(param_fname, sim_idx):
     return events, end_time
 
 
-def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict, stdout=None, stderr=None):
+def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict,
+                   stdout=None, stderr=None):
 
     # Load parameters
     with open(param_fname, 'r') as in_f:
@@ -88,6 +89,7 @@ def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict
     print('-'*80, flush=True)
 
     with open(out_fname, 'w') as out_f:
+        print('Save:', out_fname)
         json.dump(res_dict, out_f)
 
     print()
@@ -133,7 +135,6 @@ if __name__ == "__main__":
 
                 # Build output filename
                 out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}-{p_idx:04d}.json')
-
 
                 # Build stdout/stderr filenames
                 if args.no_std_redirect:

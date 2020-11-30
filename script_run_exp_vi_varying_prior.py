@@ -97,9 +97,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-e', '--input', dest='exp_dir', type=str,
                         required=True, help="Input directory")
-    parser.add_argument('-p', '--pool', dest='n_workers', type=int,
-                        required=False, default=cpu_count() - 1,
-                        help="Size of the parallel pool")
     parser.add_argument('-s', '--n_sims', dest='n_sims', type=int,
                         required=True, help="Number of simulatins per sub-exp")
     args = parser.parse_args()
@@ -122,6 +119,9 @@ if __name__ == "__main__":
             print('done.')
             print()
 
+            print('Run inference')
+            print('=' * 80, flush=True)
+
             # Init the list of arguments for the workers
             pool_args = list()
 
@@ -131,36 +131,6 @@ if __name__ == "__main__":
                 # Build output filename
                 out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}-{p_idx:04d}.json')
 
-                # Build stdout/stderr filenames
-                if args.no_std_redirect:
-                    stdout = None
-                    stderr = None
-                else:
-                    stdout = os.path.join(sub_exp_dir, f'stdout-{sim_idx:02d}-{p_idx:04d}')
-                    stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}-{p_idx:04d}')
-                # Add tuple of arguments to list
-                pool_args.append((events, end_time, param_fname, out_fname, sim_idx, prior_dict))
+                run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict)
 
-            print(f"Start {len(pool_args):d} experiments on a pool of {args.n_workers:d} workers")
-            print(f"=============================================================================")
-
-            if args.n_workers > 1:
-                # Init pool of workers
-                pool = Pool(args.n_workers)
-                # Run all simulations
-                pool.starmap_async(run_single_job, pool_args)
-                # Close pool
-                pool.close()
-                # Wait for them to finish
-                pool.join()
-            else:
-                # Single process
-                for args in pool_args:
-                    run_single_job(*args)
-
-            # Reset std redirect
-            sys.stdout = sys.__stdout__
-            sys.stderr = sys.__stderr__
-
-            print('Job Done.')
             print()

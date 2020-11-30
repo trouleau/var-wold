@@ -34,7 +34,7 @@ def build_prior_dict_arr(N):
     return df.to_dict('records')
 
 
-PRIOR_DICT_ARR = build_prior_dict_arr(N=50)
+PRIOR_DICT_ARR = build_prior_dict_arr(N=20)
 
 
 def run_single_job(param_fname, out_fname, sim_idx, prior_dict, stdout=None, stderr=None):

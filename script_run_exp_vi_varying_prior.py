@@ -2,6 +2,7 @@ from multiprocessing import Pool, cpu_count
 from datetime import datetime
 import numpy as np
 import argparse
+import pandas as pd
 import time
 import json
 import glob
@@ -37,7 +38,26 @@ def build_prior_dict_arr(N):
 PRIOR_DICT_ARR = build_prior_dict_arr(N=20)
 
 
-def run_single_job(param_fname, out_fname, sim_idx, prior_dict, stdout=None, stderr=None):
+def pre_run(param_fname, sim_idx):
+    # Load parameters
+    with open(param_fname, 'r') as in_f:
+        sim_param_dict = json.load(in_f)
+    param_dict = {k: np.array(v) for k, v in sim_param_dict['params'].items()}
+    sim_seed = sim_param_dict['sim_seed_list'][sim_idx]
+    max_jumps = sim_param_dict['max_jumps']
+    # Simulate data
+    events, end_time, _ = generate_data(max_jumps=max_jumps, sim_seed=sim_seed,
+                                        **param_dict)
+    return events, end_time
+
+
+def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict, stdout=None, stderr=None):
+
+    # Load parameters
+    with open(param_fname, 'r') as in_f:
+        sim_param_dict = json.load(in_f)
+    param_dict = {k: np.array(v) for k, v in sim_param_dict['params'].items()}
+    sim_seed = sim_param_dict['sim_seed_list'][sim_idx]
 
     # Log in main std before redirecting
     job_args = (param_fname, out_fname, sim_idx)
@@ -50,21 +70,6 @@ def run_single_job(param_fname, out_fname, sim_idx, prior_dict, stdout=None, std
         sys.stdout = open(stdout, 'w')
     if stderr is not None:
         sys.stderr = open(stderr, 'w')
-
-    # Load parameters
-    with open(param_fname, 'r') as in_f:
-        sim_param_dict = json.load(in_f)
-    param_dict = {k: np.array(v) for k, v in sim_param_dict['params'].items()}
-    sim_seed = sim_param_dict['sim_seed_list'][sim_idx]
-    max_jumps = sim_param_dict['max_jumps']
-
-    print()
-    n_sim = len(sim_param_dict['sim_seed_list'])
-    print(f'Simulation {sim_idx+1:>2d} / {n_sim:>2d}', flush=True)
-
-    # Simulate data
-    events, end_time, _ = generate_data(max_jumps=max_jumps, sim_seed=sim_seed,
-                                        **param_dict)
 
     res_dict = {}
 
@@ -98,47 +103,60 @@ if __name__ == "__main__":
     # Pattern to extract list of parameter files
     search_pattern = os.path.join(args.exp_dir, '*', 'params.json')
 
-    # Init the list of arguments for the workers
-    pool_args = list()
-
     # For each sub-experiment (each set of parameters)
-    for prior_dict in PRIOR_VALUE_ARR:
-        for param_fname in sorted(glob.glob(search_pattern)):
-            # Extract sub-experiment directory
-            sub_exp_dir = os.path.split(param_fname)[0]
-            # For each simulation
-            for sim_idx in range(args.n_sims):
-                # Build output filename
-                out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}.json')
+    for param_fname in sorted(glob.glob(search_pattern)):
+
+        # Extract sub-experiment directory
+        sub_exp_dir = os.path.split(param_fname)[0]
+
+        # For each simulation
+        for sim_idx in range(args.n_sims):
+
+            # Build output filename
+            out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}.json')
+
+            # Simulate dataset
+            print(f'Simulate data for fname:{param_fname}, idx: {sim_idx}...')
+            events, end_time = pre_run(param_fname, sim_idx)
+            print('done.')
+            print()
+
+            # Init the list of arguments for the workers
+            pool_args = list()
+
+            # For each prior value
+            for p_idx, prior_dict in enumerate(PRIOR_DICT_ARR):
+
                 # Build stdout/stderr filenames
                 if args.no_std_redirect:
                     stdout = None
                     stderr = None
                 else:
-                    stdout = os.path.join(sub_exp_dir, f'stdout-{sim_idx:02d}')
-                    stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}')
+                    stdout = os.path.join(sub_exp_dir, f'stdout-{sim_idx:02d}-{p_idx:04d}')
+                    stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}-{p_idx:04d}')
                 # Add tuple of arguments to list
-                pool_args.append(
-                    (param_fname, out_fname, sim_idx, , stdout, stderr))
+                pool_args.append((events, end_time, param_fname, out_fname, sim_idx, stdout, stderr))
 
-    # # Reverse list of args (will be popped from last element)
-    # pool_args = pool_args[::-1]
+            print(f"Start {len(pool_args):d} experiments on a pool of {args.n_workers:d} workers")
+            print(f"=============================================================================")
 
-    print(f"Start {len(pool_args):d} experiments on a pool of {args.n_workers:d} workers")
-    print(f"=============================================================================")
+            if args.n_workers > 1:
+                # Init pool of workers
+                pool = Pool(args.n_workers)
+                # Run all simulations
+                pool.starmap_async(run_single_job, pool_args)
+                # Close pool
+                pool.close()
+                # Wait for them to finish
+                pool.join()
+            else:
+                # Single process
+                for args in pool_args:
+                    run_single_job(*args)
 
-    if args.n_workers > 1:
-        # Init pool of workers
-        pool = Pool(args.n_workers)
-        # Run all simulations
-        pool.starmap_async(run_single_job, pool_args)
-        # Close pool
-        pool.close()
-        # Wait for them to finish
-        pool.join()
-    else:
-        # Single process
-        for args in pool_args:
-            run_single_job(*args)
+            # Reset std redirect
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
 
-    print('Job Done.')
+            print('Job Done.')
+            print()

@@ -291,18 +291,21 @@ def run_vi_fixed_beta(events, end_time, coeffs_true_dict, seed, prior_dict=None)
     return res_dict
 
 
-def run_vi(events, end_time, coeffs_true_dict, seed):
+def run_vi(events, end_time, coeffs_true_dict, seed, prior_dict=None):
     dim = len(events)
     # Set model
     model = tsvar.models.WoldModelVariationalOther(verbose=True)
     model.observe(events)
     # Set priors
+    # Set priors
+    if prior_dict is None:
+        prior_dict = {'as_pr': 0.1, 'ar_pr': 1.0, 'bs_pr': 10.0, 'br_pr': 10.0}
     # prior: Alpha
-    as_pr = 0.1 * np.ones((dim + 1, dim))
-    ar_pr = 1.0 * np.ones((dim + 1, dim))
+    as_pr = prior_dict['as_pr'] * np.ones((dim + 1, dim))
+    ar_pr = prior_dict['ar_pr'] * np.ones((dim + 1, dim))
     # prior: Beta
-    bs_pr = 10.0 * np.ones((dim, dim))
-    br_pr = 10.0 * np.ones((dim, dim))
+    bs_pr = prior_dict['bs_pr'] * np.ones((dim, dim))
+    br_pr = prior_dict['br_pr'] * np.ones((dim, dim))
     # prior: Z
     zc_pr = [1.0 * np.ones((len(events[i]), dim+1)) for i in range(dim)]
     # Extract ground truth (for callback, only alphas)
@@ -337,6 +340,7 @@ def run_vi(events, end_time, coeffs_true_dict, seed):
         'bs_po': model._bs_po.tolist(),
         'br_po': model._br_po.tolist(),
     }
+    res_dict.update(prior_dict)  # Add prior to results
     res_dict['conv'] = conv
     res_dict['history'] = callback.to_dict()
     return res_dict

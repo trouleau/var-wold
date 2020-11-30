@@ -112,9 +112,6 @@ if __name__ == "__main__":
         # For each simulation
         for sim_idx in range(args.n_sims):
 
-            # Build output filename
-            out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}.json')
-
             # Simulate dataset
             print(f'Simulate data for fname:{param_fname}, idx: {sim_idx}...')
             events, end_time = pre_run(param_fname, sim_idx)
@@ -126,6 +123,10 @@ if __name__ == "__main__":
 
             # For each prior value
             for p_idx, prior_dict in enumerate(PRIOR_DICT_ARR):
+
+                # Build output filename
+                out_fname = os.path.join(sub_exp_dir, f'output-{sim_idx:02d}-{p_idx:04d}.json')
+
 
                 # Build stdout/stderr filenames
                 if args.no_std_redirect:

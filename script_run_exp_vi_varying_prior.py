@@ -58,8 +58,7 @@ def pre_run(param_fname, sim_idx):
     return events, end_time
 
 
-def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict,
-                   stdout=None, stderr=None):
+def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict):
 
     # Load parameters
     with open(param_fname, 'r') as in_f:
@@ -73,23 +72,21 @@ def run_single_job(events, end_time, param_fname, out_fname, sim_idx, prior_dict
     print('Starting job:', job_args, 'at', job_start_time,
           file=sys.__stdout__, flush=True)
 
-    # Redirect stdout/stderr
-    if stdout is not None:
-        sys.stdout = open(stdout, 'w')
-    if stderr is not None:
-        sys.stderr = open(stderr, 'w')
-
     res_dict = {}
+    res_dict.update(prior_dict)
 
     print()
     print('Run VI')
     print('------')
+    print()
+    print('With prior:', prior_dict)
+    print()
     res_dict['vi'] = run_vi(events, end_time, param_dict, seed=sim_seed, prior_dict=prior_dict)
     print()
     print('-'*80, flush=True)
 
     with open(out_fname, 'w') as out_f:
-        print('Save:', out_fname)
+        print('Save:', out_fname, file=sys.__stdout__, flush=True)
         json.dump(res_dict, out_f)
 
     print()
@@ -105,8 +102,6 @@ if __name__ == "__main__":
                         help="Size of the parallel pool")
     parser.add_argument('-s', '--n_sims', dest='n_sims', type=int,
                         required=True, help="Number of simulatins per sub-exp")
-    parser.add_argument('--no-std-redirect', dest='no_std_redirect',
-                        action="store_true", help="Do not redirect stdout/stderr")
     args = parser.parse_args()
 
     # Pattern to extract list of parameter files
@@ -144,7 +139,7 @@ if __name__ == "__main__":
                     stdout = os.path.join(sub_exp_dir, f'stdout-{sim_idx:02d}-{p_idx:04d}')
                     stderr = os.path.join(sub_exp_dir, f'stderr-{sim_idx:02d}-{p_idx:04d}')
                 # Add tuple of arguments to list
-                pool_args.append((events, end_time, param_fname, out_fname, sim_idx, stdout, stderr))
+                pool_args.append((events, end_time, param_fname, out_fname, sim_idx, prior_dict))
 
             print(f"Start {len(pool_args):d} experiments on a pool of {args.n_workers:d} workers")
             print(f"=============================================================================")

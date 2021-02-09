@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import networkx as nx
+import pickle
 import argparse
 import json
 import sys
@@ -28,7 +29,12 @@ def load_dataset(input_path, top):
     print(f"Input file: {input_path}")
     print(f"Top: {top:d}")
 
-    dataset = Dataset(input_path, top=top, timescale='median')
+    if input_path.endswith('.pk'):
+        with open(input_path, 'rb') as f:
+            dataset = pickle.load(f)
+        assert dataset.top == top, "Mismatch between preprocessed dataset and top value"
+    else:
+        dataset = Dataset(input_path, top=top, timescale='busca')
 
     # Print stats about the dataset
     print()
@@ -57,9 +63,9 @@ def run_inference(dataset, out_fname, algo_filter, prior_dict):
     end_time = dataset.end_time
 
     param_dict = {
-        'baseline': 1 / np.array([ev[0] for ev in events]),
+        'baseline': 1 / np.array([ev[0]+1e-5 for ev in events]),
         'adjacency': nx.adjacency_matrix(dataset.graph).toarray(),
-        'beta': dataset.busca_beta_ji
+        'beta': 1.0 * np.ones((dataset.dim, dataset.dim))
     }
 
     sim_seed = np.random.randint(0, 2**31 - 1)
@@ -107,7 +113,7 @@ def run_inference(dataset, out_fname, algo_filter, prior_dict):
         print()
         print('Run VI')
         print('------')
-        res_dict['vi'] = run_vi(events, end_time, param_dict, seed=sim_seed)
+        res_dict['vi'] = run_vi(events, end_time, param_dict, seed=sim_seed, prior_dict=prior_dict)
         print()
 
         as_po = np.array(res_dict['vi-fixed-beta']['coeffs']['as_po'])
@@ -182,6 +188,11 @@ if __name__ == "__main__":
                         default=0.1, help="`as_pr` for vi/vifb methods")
     parser.add_argument('--ar_pr', dest='ar_pr', type=float, required=False,
                         default=1.0, help="`as_pr` for vi/vifb methods")
+    parser.add_argument('--bs_pr', dest='bs_pr', type=float, required=False,
+                        default=0.1, help="`as_pr` for vi/vifb methods")
+    parser.add_argument('--br_pr', dest='br_pr', type=float, required=False,
+                        default=1.0, help="`as_pr` for vi/vifb methods")
+
 
     args = parser.parse_args()
 

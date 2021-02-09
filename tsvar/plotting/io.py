@@ -72,6 +72,10 @@ def _process_vi(data):
     model = tsvar.models.WoldModelVariational()
     series['adj_mean'] = model.alpha_posterior_mean(as_po=series['as_po'], ar_po=series['ar_po'])[1:, :]
     series['adj_mode'] = model.alpha_posterior_mode(as_po=series['as_po'], ar_po=series['ar_po'])[1:, :]
+    # Add priors if presents
+    for key in ['as_pr', 'ar_pr', 'bs_pr', 'br_pr']:
+        if key in data:
+            series[key] = data[key]
     # Add prefix
     series = series.rename({col: 'vi_' + col for col in series.index})
     return series
@@ -136,7 +140,7 @@ def _process_output_file(output_fname, param_df):
         series = pd.concat(series_list)
         series['expId'] = exp_id
         series['outputIdx'] = output_idx
-        series['dim_o'] = dim
+        # series['dim_o'] = dim
         return series
     else:
         print('Failed:', output_fname)

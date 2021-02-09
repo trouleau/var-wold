@@ -78,6 +78,7 @@ class Dataset:
             raise ValueError('`timescale should be a positive number`')
         dataset.timestamps = [ev / timescale for ev in dataset.timestamps]
         dataset.time_scale = timescale
+        dataset.busca_beta_ji = busca_beta_ji
         # Set end time attribute
         dataset.end_time = max(map(max, dataset.timestamps))
         # Set names/idx mappings
